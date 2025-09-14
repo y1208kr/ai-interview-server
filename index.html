@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 면접 시스템 - 일반형</title>
+    <!-- jsPDF 라이브러리: PDF 생성을 위해 필요 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        /* 기본 스타일 */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #6c757d 0%, #343a40 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .container { background: rgba(255, 255, 255, 0.98); border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); max-width: 800px; width: 100%; padding: 40px; backdrop-filter: blur(10px); animation: fadeIn 0.5s ease-out; position: relative; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* 화면 전환 스타일 */
+        .screen { display: none; animation: slideIn 0.4s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        .screen.active { display: block; }
+
+        /* 공통 UI 요소 */
+        h1 { color: #333; margin-bottom: 30px; font-size: 2em; text-align: center; background: linear-gradient(135deg, #495057, #212529); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        p { line-height: 1.7; color: #495057; }
+        .btn { background: #495057; color: white; border: none; padding: 15px 40px; font-size: 1.1em; border-radius: 50px; cursor: pointer; transition: all 0.3s ease; margin: 10px; box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3); }
+        .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108, 117, 125, 0.4); }
+        .btn:disabled { background: #adb5bd; cursor: not-allowed; transform: none; box-shadow: none; }
+        .ai-message { background: #f8f9fa; border-left: 4px solid #6c757d; padding: 20px; margin: 20px 0; border-radius: 8px; line-height: 1.8; color: #495057; font-size: 1.05em; }
+        
+        /* 동의서 및 폼 스타일 */
+        .consent-form { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; max-height: 150px; overflow-y: auto; border: 1px solid #dee2e6; }
+        .consent-form h3 { color: #343a40; margin-bottom: 15px; }
+        .checkbox-container { margin: 15px 0; display: flex; align-items: center; gap: 10px; }
+        .checkbox-container input { width: 18px; height: 18px; cursor: pointer; }
+        .checkbox-container label { cursor: pointer; color: #495057; font-weight: 500;}
+        .info-form { background: #f8f9fa; padding: 25px; border-radius: 10px; margin: 20px 0; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+        .form-group { margin: 10px 0; }
+        .form-group label { display: block; margin-bottom: 8px; color: #495057; font-weight: 500; }
+        .form-group input, .form-group select { width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 1em; }
+
+        /* 면접 진행 스타일 */
+        .question-box { background: #fff; border: 1px solid #e9ecef; border-radius: 12px; padding: 25px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .question-number { color: #6c757d; font-weight: bold; font-size: 1.2em; margin-bottom: 10px; }
+        .prep-timer { text-align: center; margin: 30px 0; padding: 20px; background: #fff3cd; border-radius: 10px; border: 1px solid #ffeaa7; }
+        .recording-status { display: inline-block; padding: 10px 20px; background: #f8f9fa; border-radius: 25px; margin-bottom: 20px; font-weight: 500; }
+        .recording-status.active { background: #ff4757; color: white; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 71, 87, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0); } }
+        .timer { font-size: 2em; color: #495057; margin: 20px 0; font-weight: bold; text-align: center; font-variant-numeric: tabular-nums; }
+
+        /* 설문조사 스타일 */
+        .survey-form-container { max-height: 50vh; overflow-y: auto; padding: 5px 15px 5px 5px; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 20px;}
+        .survey-group { margin-bottom: 30px; }
+        .survey-group h3 { color: #343a40; margin-bottom: 20px; border-bottom: 2px solid #e9ecef; padding-bottom: 10px; font-size: 1.2em; }
+        .survey-item { margin-bottom: 25px; }
+        .survey-item p { margin-bottom: 15px; color: #212529; font-weight: 500; font-size: 1.05em;}
+        .likert-scale { display: flex; justify-content: space-between; align-items: center; list-style: none; padding: 0; max-width: 500px; margin: 10px auto 0; }
+        .likert-scale li { display: flex; flex-direction: column; align-items: center; flex: 1; }
+        .likert-scale input[type="radio"] { margin-bottom: 5px; width: 18px; height: 18px; cursor: pointer; }
+        .likert-scale label { font-size: 0.85em; color: #6c757d; text-align: center; }
+
+        /* 모달 스타일 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 1000; animation: fadeInModal 0.3s; }
+        @keyframes fadeInModal { from { opacity: 0; } to { opacity: 1; } }
+        .modal-content { background: white; padding: 30px; border-radius: 15px; text-align: center; max-width: 400px; width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .modal-content p { margin-bottom: 20px; font-size: 1.1em; color: #495057; line-height: 1.6; }
+        .modal-overlay.active { display: flex; }
+
+    </style>
+</head>
+<body>
+    <div class="container" id="container">
+        <!-- 화면 내용은 JavaScript로 동적 생성 -->
+    </div>
+    
+    <div id="modal" class="modal-overlay">
+        <div class="modal-content">
+            <p id="modalMessage"></p>
+            <button class="btn" onclick="closeModal()">확인</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const researcherName = "염승빈";
+        const questions = [
+            "당신에 대해 소개해 주십시오.",
+            "리더십을 발휘했던 경험에 대해 말씀해 주십시오.",
+            "팀의 일원으로서 효과적으로 협업했던 경험에 대해 말씀해 주십시오."
+        ];
+        
+        // --- Global State ---
+        let participantInfo = {};
+        let allAudioBlobs = [];
+        let currentQuestionIndex = 0;
+        let mediaRecorder;
+        let audioStream = null;
+        let prepTimerInterval, recordingTimerInterval;
+        
+        // --- Core Application Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // 가장 먼저 마이크 권한을 확인
+            checkMicPermission();
+        });
+
+        async function checkMicPermission() {
+            try {
+                // 권한 요청을 통해 스트림을 얻고 바로 닫아서, 실제 녹음은 나중에 하도록 함
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+                console.log("마이크 권한이 확인되었습니다.");
+                showScreen('startScreen'); // 권한 확인 후 시작 화면 표시
+            } catch (err) {
+                console.error('마이크 접근 오류:', err);
+                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주시고, 페이지를 새로고침 해주세요.');
+                // 권한 거부 시 진행 불가 메시지 표시
+                const container = document.getElementById('container');
+                container.innerHTML = `<h1>권한 필요</h1><p class="ai-message">원활한 실험 진행을 위해 마이크 접근 권한이 반드시 필요합니다. 브라우저 주소창 왼쪽의 자물쇠 아이콘을 클릭하여 마이크 권한을 '허용'으로 변경한 뒤, 페이지를 새로고침 해주세요.</p>`;
+            }
+        }
+
+        function showScreen(screenId) {
+            const container = document.getElementById('container');
+            container.innerHTML = getScreenHTML(screenId);
+            
+            if (screenId === 'startScreen') {
+                document.getElementById('consentCheck1').addEventListener('change', checkAllConsents);
+                document.getElementById('consentCheck2').addEventListener('change', checkAllConsents);
+            } else if (screenId === 'questionScreen') {
+                startPrepTimer();
+            }
+        }
+        
+        function getScreenHTML(screenId) {
+            switch(screenId) {
+                case 'startScreen':
+                    return `
+                        <h1>AI 면접 실험 참여 안내</h1>
+                        <div class="consent-form">
+                            <h3>연구 참여 동의서</h3>
+                            <p>안녕하세요. 본 연구는 "AI 면접의 상호작용 공정성이 조직 매력도에 미치는 영향"을 주제로 하는 실험 연구입니다. (연구책임자: ${researcherName})</p>
+                            <p>잠시 시간을 내어 연구에 참여해주시면, AI 채용 시스템의 발전에 기여하는 소중한 데이터로 활용될 것입니다. 참여 과정에서 경험하시는 모든 내용은 익명으로 처리되오니 편안한 마음으로 임해주십시오.</p>
+                        </div>
+                         <div class="checkbox-container">
+                            <input type="checkbox" id="consentCheck1">
+                            <label for="consentCheck1">위 내용을 모두 확인했으며, 연구 참여에 동의합니다.</label>
+                        </div>
+                        <div class="consent-form">
+                            <h3>개인정보 수집·이용 동의서</h3>
+                            <p><strong>1. 수집·이용 목적:</strong> 학술 연구 목적의 통계 분석</p>
+                            <p><strong>2. 수집 항목:</strong> [필수] 이름, 성별, 연령대, 직업상태, 전공계열, AI면접경험, AI기술 인식, 음성녹음파일</p>
+                            <p><strong>3. 보유 및 이용 기간:</strong> 연구 종료 후 3년 (이후 즉시 파기)</p>
+                            <p><strong>4. 동의 거부 권리:</strong> 귀하는 개인정보 수집·이용에 대한 동의를 거부할 권리가 있습니다. 단, 동의 거부 시 연구 참여가 제한될 수 있습니다.</p>
+                        </div>
+                         <div class="checkbox-container">
+                            <input type="checkbox" id="consentCheck2">
+                            <label for="consentCheck2">위 개인정보 수집·이용에 동의합니다.</label>
+                        </div>
+                        <div style="text-align: center;">
+                            <button class="btn" onclick="showInfoForm()" id="startBtn" disabled>다음</button>
+                        </div>
+                    `;
+                case 'infoScreen':
+                    return `
+                        <h1>참가자 정보 입력</h1>
+                        <div class="info-form">
+                            <form id="participantForm">
+                                <div class="form-grid">
+                                    <div class="form-group"><label for="participantName">이름</label><input type="text" id="participantName" required></div>
+                                    <div class="form-group"><label for="gender">성별</label><select id="gender" required><option value="">선택</option><option value="male">남성</option><option value="female">여성</option></select></div>
+                                    <div class="form-group"><label for="ageGroup">연령대</label><select id="ageGroup" required><option value="">선택</option><option value="20s">20대</option><option value="30s">30대</option><option value="40s">40대</option><option value="50s_over">50대 이상</option></select></div>
+                                    <div class="form-group"><label for="jobStatus">현재 직업 상태</label><select id="jobStatus" required><option value="">선택</option><option value="student_undergrad">대학생</option><option value="student_grad">대학원생</option><option value="job_seeker">취업준비생</option><option value="employee">직장인</option><option value="entrepreneur">개인 사업자</option></select></div>
+                                    <div class="form-group"><label for="major">전공 계열</label><select id="major" required><option value="">선택</option><option value="humanities">인문/사회</option><option value="natural_science">자연/공학</option><option value="arts_sports">예체능</option><option value="etc">기타</option></select></div>
+                                    <div class="form-group"><label for="aiExperience">AI 면접 경험</label><select id="aiExperience" required><option value="">선택</option><option value="yes">있음</option><option value="no">없음</option></select></div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="aiAttitude">평소 AI 기술에 대한 인식</label>
+                                    <select id="aiAttitude" required>
+                                        <option value="">선택하세요</option>
+                                        <option value="1">1 (매우 부정적)</option><option value="2">2</option><option value="3">3</option>
+                                        <option value="4">4 (보통)</option><option value="5">5</option><option value="6">6</option>
+                                        <option value="7">7 (매우 긍정적)</option>
+                                    </select>
+                                </div>
+                                <div style="text-align: center; margin-top:20px;">
+                                   <button type="button" class="btn" onclick="startInterview()">면접 시작</button>
+                                </div>
+                            </form>
+                        </div>
+                    `;
+                case 'introScreen':
+                    return `
+                        <h1>AI 면접 안내</h1>
+                        <div class="ai-message">면접을 시작하겠습니다.</div>
+                        <div style="text-align: center;">
+                            <button class="btn" onclick="startFirstQuestion()">시작</button>
+                        </div>
+                    `;
+                 case 'questionScreen':
+                    const q_intro = currentQuestionIndex === 0 ? "1번 질문입니다." : (currentQuestionIndex === 1 ? "다음 질문입니다." : "마지막 질문입니다.");
+                    return `
+                        <h1>면접 질문</h1>
+                        <div class="ai-message">${q_intro}</div>
+                        <div class="question-box">
+                            <div class="question-number">질문 ${currentQuestionIndex + 1}</div>
+                            <p>${questions[currentQuestionIndex]}</p>
+                        </div>
+                        <div class="prep-timer" id="prepTimer">
+                            <h3>답변 준비 시간</h3>
+                            <div class="timer" id="prepTimerDisplay">01:00</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <button type="button" class="btn" onclick="startRecording()" id="recordBtn">답변 녹음 시작</button>
+                        </div>
+                    `;
+                case 'recordingScreen':
+                    return `
+                        <h1>답변 녹음 중</h1>
+                        <div class="question-box">
+                           <div class="question-number">질문 ${currentQuestionIndex + 1}</div>
+                           <p>${questions[currentQuestionIndex]}</p>
+                        </div>
+                        <div style="text-align: center; margin-top: 20px;">
+                           <div class="recording-status active">🔴 녹음 중</div>
+                           <div class="timer" id="recordingTimer">00:00 / 01:30</div>
+                           <p id="minRecordingTime" style="color: #ff4757; margin-top: 10px;"></p>
+                        </div>
+                        <div style="text-align: center;">
+                           <button type="button" class="btn" id="stopRecordingBtn" onclick="stopRecording()" disabled>녹음 완료</button>
+                        </div>
+                    `;
+                case 'surveyScreen':
+                    return `
+                        <h1>사후 설문조사</h1>
+                        <p class="ai-message">면접 경험을 바탕으로, 아래 각 문항에 대해 귀하의 생각과 가장 가까운 번호에 체크해주세요.</p>
+                        <div class="survey-form-container">
+                            <form id="surveyForm">
+                                <div class="survey-group">
+                                    <h3>면접관(시스템)과의 상호작용</h3>
+                                    ${generateSurveyItems('ij', ['면접관(시스템)은 저를 존중하는 태도로 대했습니다.', '면접관(시스템)은 저에게 예의를 갖추어 대했습니다.', '면접관(시스템)은 저에게 부적절하거나 무례한 발언을 하지 않았습니다.', '면접관(시스템)은 저를 대할 때 개인적인 편견 없이 대했습니다.', '면접관(시스템)은 면접 절차에 대해 솔직하게 설명해 주었습니다.', '면접관(시스템)은 면접 절차에 대한 설명을 시의적절하게 제공했습니다.', '면접관(시스템)이 제공한 설명은 합리적으로 이해가 되었습니다.', '면접관(시스템)은 제가 궁금해할 만한 사항에 대해 충분한 정보를 제공했습니다.', '면접관(시스템)은 평가가 이루어지는 방식에 대해 명확하게 설명해 주었습니다.'])}
+                                </div>
+                                <div class="survey-group">
+                                    <h3>면접 절차 및 과정</h3>
+                                    ${generateSurveyItems('pj', ['면접 과정에서 제 견해나 의견을 표현할 기회를 가졌습니다.', '면접 절차는 모든 지원자에게 일관성 있게 적용되었을 것이라고 생각합니다.', '면접 절차는 개인적인 편견 없이 중립적으로 진행되었다고 생각합니다.', '면접 평가는 정확한 정보에 근거하여 이루어졌을 것이라고 생각합니다.', '만약 잘못된 평가가 내려졌을 경우, 이를 수정할 수 있는 공식적인 절차가 마련되어 있었을 것입니다.', '면접 절차는 채용 과정 전반의 가치와 윤리를 대표한다고 생각합니다.', '면접 절차는 일반적인 윤리 및 도덕 기준에 부합했습니다.'])}
+                                </div>
+                                <div class="survey-group">
+                                    <h3>면접 경험 후 기업에 대한 생각</h3>
+                                    ${generateSurveyItems('oa', ['이 회사는 일하기에 매력적인 곳이라고 생각합니다.', '이 회사에 대해 긍정적인 인상을 갖게 되었습니다.', '전반적으로, 이 회사를 높이 평가합니다.'])}
+                                </div>
+                                 <div style="text-align: center;">
+                                    <button type="button" class="btn" onclick="submitSurvey()">최종 제출</button>
+                                </div>
+                            </form>
+                        </div>
+                    `;
+                case 'finalCompleteScreen':
+                    return `
+                        <div style="text-align: center; padding: 40px;">
+                            <h1 style="font-size: 2.5em; margin-bottom: 20px; background: none;">✅</h1>
+                            <h2>모든 실험이 완료되었습니다</h2>
+                            <p class="ai-message" style="margin-top: 20px; border-left-color: #28a745;">연구에 참여해주셔서 진심으로 감사합니다. 귀하의 소중한 데이터는 학술 발전에 큰 도움이 될 것입니다.</p>
+                        </div>
+                    `;
+            }
+        }
+        
+        function generateSurveyItems(prefix, items) {
+            let html = '';
+            items.forEach((item, index) => {
+                const name = `${prefix}${index + 1}`;
+                html += `
+                    <div class="survey-item">
+                        <p>${index + 1}. ${item}</p>
+                        <ul class="likert-scale">
+                            <li><label for="${name}_1">전혀<br>아니다</label><input type="radio" id="${name}_1" name="${name}" value="1" required></li>
+                            <li><label for="${name}_2">2</label><input type="radio" id="${name}_2" name="${name}" value="2"></li>
+                            <li><label for="${name}_3">3</label><input type="radio" id="${name}_3" name="${name}" value="3"></li>
+                            <li><label for="${name}_4">보통</label><input type="radio" id="${name}_4" name="${name}" value="4"></li>
+                            <li><label for="${name}_5">5</label><input type="radio" id="${name}_5" name="${name}" value="5"></li>
+                            <li><label for="${name}_6">6</label><input type="radio" id="${name}_6" name="${name}" value="6"></li>
+                            <li><label for="${name}_7">매우<br>그렇다</label><input type="radio" id="${name}_7" name="${name}" value="7"></li>
+                        </ul>
+                    </div>
+                `;
+            });
+            return html;
+        }
+
+        // --- Event Handlers & Logic ---
+        function checkAllConsents() {
+            const consent1 = document.getElementById('consentCheck1').checked;
+            const consent2 = document.getElementById('consentCheck2').checked;
+            document.getElementById('startBtn').disabled = !(consent1 && consent2);
+        }
+
+        function showInfoForm() { showScreen('infoScreen'); }
+        function startFirstQuestion() { showScreen('questionScreen'); }
+        
+        function startInterview() {
+            const form = document.getElementById('participantForm');
+            if (!form.checkValidity()) {
+                showModal('모든 인적 정보를 입력해주세요.');
+                return;
+            }
+            participantInfo = {
+                name: document.getElementById('participantName').value,
+                gender: document.getElementById('gender').value,
+                ageGroup: document.getElementById('ageGroup').value,
+                jobStatus: document.getElementById('jobStatus').value,
+                major: document.getElementById('major').value,
+                aiExperience: document.getElementById('aiExperience').value,
+                aiAttitude: document.getElementById('aiAttitude').value,
+                condition: 'general_ai',
+                timestamp: new Date().toISOString()
+            };
+            showScreen('introScreen');
+        }
+
+        function startPrepTimer() {
+            let seconds = 60;
+            const timerDisplay = document.getElementById('prepTimerDisplay');
+            
+            prepTimerInterval = setInterval(() => {
+                seconds--;
+                const secs = seconds.toString().padStart(2, '0');
+                timerDisplay.textContent = `00:${secs}`;
+                if (seconds <= 0) {
+                    clearInterval(prepTimerInterval);
+                    document.getElementById('prepTimer').innerHTML = '<h3 style="color: #28a745;">준비 시간이 종료되었습니다. 녹음 버튼을 눌러 답변을 시작하세요.</h3>';
+                }
+            }, 1000);
+        }
+
+        async function startRecording() {
+            clearInterval(prepTimerInterval); // 준비 타이머 중지
+            showScreen('recordingScreen');
+            
+            try {
+                audioStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { echoCancellation: true, noiseSuppression: true } 
+                });
+                
+                let audioChunks = [];
+                mediaRecorder = new MediaRecorder(audioStream);
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    allAudioBlobs.push(audioBlob);
+                    if (audioStream) {
+                        audioStream.getTracks().forEach(track => track.stop());
+                        audioStream = null;
+                    }
+                };
+
+                mediaRecorder.start();
+                startRecordingTimer();
+
+            } catch (err) {
+                console.error('녹음 시작 오류:', err);
+                showModal('녹음을 시작하는 중 오류가 발생했습니다. 마이크 권한을 다시 확인해주세요.');
+                showScreen('questionScreen'); // 오류 발생 시 이전 화면으로 복귀
+            }
+        }
+
+        function startRecordingTimer() {
+            let seconds = 0;
+            const minRecordTime = 20; // 최소 녹음 시간 (초)
+            const maxRecordTime = 90; // 최대 녹음 시간 (초)
+            const timerDisplay = document.getElementById('recordingTimer');
+            const stopBtn = document.getElementById('stopRecordingBtn');
+            const minTimeDisplay = document.getElementById('minRecordingTime');
+            
+            recordingTimerInterval = setInterval(() => {
+                seconds++;
+                const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const secs = (seconds % 60).toString().padStart(2, '0');
+                timerDisplay.textContent = `${mins}:${secs} / ${Math.floor(maxRecordTime/60).toString().padStart(2, '0')}:${(maxRecordTime%60).toString().padStart(2, '0')}`;
+
+                if (seconds >= minRecordTime) {
+                    stopBtn.disabled = false;
+                    minTimeDisplay.textContent = '';
+                } else {
+                    minTimeDisplay.textContent = `${minRecordTime - seconds}초 더 녹음해야 합니다.`;
+                }
+
+                if (seconds >= maxRecordTime) {
+                    stopRecording();
+                }
+            }, 1000);
+        }
+
+        function stopRecording() {
+            clearInterval(recordingTimerInterval);
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+
+            currentQuestionIndex++;
+            if (currentQuestionIndex < questions.length) {
+                showScreen('questionScreen');
+            } else {
+                completeInterview();
+            }
+        }
+        
+        function completeInterview() {
+            showScreen('surveyScreen');
+        }
+
+        function submitSurvey() {
+            const form = document.getElementById('surveyForm');
+            if (!form.checkValidity()) {
+                showModal("모든 설문 문항에 답변해주세요.");
+                return;
+            }
+            
+            const formData = new FormData(form);
+            const surveyData = {};
+            for (let [key, value] of formData.entries()) {
+                surveyData[key] = value;
+            }
+            participantInfo.surveyData = surveyData;
+
+            generateAndPrepareFiles();
+            showScreen('finalCompleteScreen');
+        }
+
+        function generateAndPrepareFiles() {
+            // --- 1. 연구 동의서 및 인적 정보 PDF 생성 ---
+            const { jsPDF } = window.jspdf;
+            const consentDoc = new jsPDF();
+            const participantName = participantInfo.name || 'UnknownParticipant';
+
+            consentDoc.setFont('helvetica', 'normal');
+            consentDoc.text(`Participant Name: ${participantName}`, 10, 10);
+            consentDoc.text("--------------------------------------------------", 10, 15);
+            consentDoc.text("Research Participation and Personal Information Agreement", 10, 25);
+            consentDoc.text("Agreed to participate in research: Yes", 10, 35);
+            consentDoc.text("Agreed to personal data collection: Yes", 10, 45);
+            
+            consentDoc.text("Participant Information", 10, 65);
+            let y = 75;
+            for(const [key, value] of Object.entries(participantInfo)) {
+                 if (key !== 'surveyData' && key !== 'condition' && key !== 'timestamp') {
+                     consentDoc.text(`${key}: ${value}`, 10, y);
+                     y += 10;
+                 }
+            }
+            const consentPdfBlob = consentDoc.output('blob');
+
+            // --- 2. 설문 결과 PDF 생성 ---
+            const surveyDoc = new jsPDF();
+            surveyDoc.setFont('helvetica', 'normal');
+            surveyDoc.text(`Participant Name: ${participantName}`, 10, 10);
+            surveyDoc.text("--------------------------------------------------", 10, 15);
+            surveyDoc.text("Post-Interview Survey Results", 10, 25);
+            let surveyY = 35;
+            for(const [key, value] of Object.entries(participantInfo.surveyData)) {
+                surveyDoc.text(`${key}: ${value}`, 10, surveyY);
+                surveyY += 10;
+                if (surveyY > 280) { // 페이지 넘어갈 경우
+                    surveyDoc.addPage();
+                    surveyY = 10;
+                }
+            }
+            const surveyPdfBlob = surveyDoc.output('blob');
+
+
+            // --- 3. 서버 전송을 위한 FormData 객체 생성 ---
+            const dataToSend = new FormData();
+            dataToSend.append('participantInfo', JSON.stringify(participantInfo)); 
+            
+            dataToSend.append(`${participantName}_consent_info.pdf`, consentPdfBlob, `${participantName}_consent_info.pdf`);
+            dataToSend.append(`${participantName}_survey.pdf`, surveyPdfBlob, `${participantName}_survey.pdf`);
+            
+            allAudioBlobs.forEach((blob, index) => {
+                const fileName = `${participantName}_q${index+1}_audio.mp4`; // 요청에 따라 mp4 확장자 사용
+                dataToSend.append(fileName, blob, fileName);
+            });
+            
+            console.log("--- 데이터 서버로 전송 시도 ---");
+            
+            // 서버로 데이터 전송
+            fetch('https://ai-interview-server-cwvf.onrender.com/upload-and-email', {
+                method: 'POST',
+                body: dataToSend
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Server responded with an error.');
+                }
+                return response.text();
+            })
+            .then(data => {
+                console.log('서버 응답:', data);
+            })
+            .catch(error => {
+                console.error('전송 실패:', error);
+                showModal('데이터 전송에 실패했습니다. 관리자에게 문의하세요.');
+            });
+        }
+        
+        // --- Utility Functions ---
+        function showModal(message) {
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('modal').classList.add('active');
+        }
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+    </script>
+</body>
+</html>
+
