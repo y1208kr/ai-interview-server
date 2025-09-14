@@ -1,93 +1,153 @@
 /*
- * 이 코드는 Node.js 환경에서 실행되어야 하는 서버 예시 코드입니다.
- * 이 파일을 실행하려면 Node.js를 설치하고, 터미널에서 다음 명령어를 실행해야 합니다.
- * npm install express multer nodemailer
+ * Google Drive 및 Sheets 연동 과정을 추적하기 위해 상세한 로그를 추가한 버전입니다.
  */
-
 const express = require('express');
 const multer = require('multer');
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
-const cors = require('cors'); // CORS 처리를 위한 라이브러리
+const cors = require('cors');
+const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { JWT } = require('google-auth-library');
+const { google } = require('googleapis');
 
 const app = express();
-const port = 3000; // 서버가 실행될 포트
+const port = process.env.PORT || 3000;
 
-// CORS 설정: 모든 도메인에서의 요청을 허용 (실제 운영 시에는 특정 도메인만 허용하도록 변경해야 함)
 app.use(cors());
-
-// 파일이 업로드될 임시 저장소 설정
 const upload = multer({ dest: 'uploads/' });
 
-// POST 요청을 처리할 API 엔드포인트 생성
-// HTML의 fetch 요청 주소는 'http://localhost:3000/upload-and-email'이 됩니다.
-app.post('/upload-and-email', upload.any(), (req, res) => {
-    console.log('파일과 데이터를 받았습니다.');
+// --- Google API 설정 ---
+const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
+const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+const GOOGLE_PRIVATE_KEY = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+const GOOGLE_DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-    // req.files에 첨부파일 정보가, req.body에 JSON 문자열이 들어옵니다.
+const serviceAccountAuth = new JWT({
+    email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: GOOGLE_PRIVATE_KEY,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'],
+});
+
+const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+const drive = google.drive({ version: 'v3', auth: serviceAccountAuth });
+
+
+// --- Google Drive 파일 업로드 헬퍼 함수 ---
+async function uploadFileToDrive(file) {
+    try {
+        console.log(`[Drive] '${file.originalname}' 파일 업로드 시도...`);
+        const response = await drive.files.create({
+            requestBody: {
+                name: file.originalname,
+                parents: [GOOGLE_DRIVE_FOLDER_ID]
+            },
+            media: {
+                mimeType: file.mimetype,
+                body: fs.createReadStream(file.path)
+            }
+        });
+        console.log(`[Drive] '${file.originalname}' 파일 업로드 성공. ID: ${response.data.id}`);
+
+        await drive.permissions.create({
+            fileId: response.data.id,
+            requestBody: { role: 'reader', type: 'anyone' }
+        });
+
+        const result = await drive.files.get({
+            fileId: response.data.id,
+            fields: 'webViewLink'
+        });
+        console.log(`[Drive] '${file.originalname}' 파일 링크 생성 성공.`);
+        return result.data.webViewLink;
+
+    } catch (error) {
+        console.error('[Drive] Google Drive 업로드 중 심각한 오류 발생:', error);
+        return null;
+    }
+}
+
+
+// --- 서버 메인 로직 ---
+app.post('/upload-and-email', upload.any(), async (req, res) => {
+    console.log("///////////////////////////////////////////////////////////");
+    console.log("파일과 데이터를 받았습니다.");
+
     const files = req.files;
     const participantInfo = JSON.parse(req.body.participantInfo);
     const participantName = participantInfo.name || 'UnknownParticipant';
-
     console.log(`참가자 이름: ${participantName}`);
 
-    // 1. Nodemailer를 사용하여 이메일 전송 설정
-    // 실제 사용 시에는 보안을 위해 환경 변수 등을 사용해야 합니다.
+    // 1. 모든 파일을 Google Drive에 업로드하고 링크 받아오기
+    const fileLinks = {};
+    for (const file of files) {
+        const link = await uploadFileToDrive(file);
+        let key;
+        if (file.fieldname.includes('audio')) {
+            key = file.fieldname.split('_')[1].replace('q', 'Audio_Q');
+        } else if (file.fieldname.includes('consent')) {
+            key = 'PDF_Consent';
+        } else if (file.fieldname.includes('survey')) {
+            key = 'PDF_Survey';
+        }
+        if (key) {
+            fileLinks[key] = link;
+        }
+    }
+    console.log('생성된 파일 링크:', fileLinks);
+
+    // 2. Google Sheets에 모든 데이터 추가
+    try {
+        console.log("[Sheets] 시트 정보 로딩 시도...");
+        await doc.loadInfo();
+        const sheet = doc.sheetsByIndex[0];
+        console.log(`[Sheets] '${sheet.title}' 시트를 찾았습니다.`);
+        const newRow = {
+            Timestamp: participantInfo.timestamp,
+            Name: participantInfo.name,
+            Gender: participantInfo.gender,
+            AgeGroup: participantInfo.ageGroup,
+            JobStatus: participantInfo.jobStatus,
+            Major: participantInfo.major,
+            AIExperience: participantInfo.aiExperience,
+            AIAttitude: participantInfo.aiAttitude,
+            ...participantInfo.surveyData,
+            ...fileLinks
+        };
+        await sheet.addRow(newRow);
+        console.log('[Sheets] Google Sheets에 데이터 추가 성공');
+    } catch (error) {
+        console.error('[Sheets] Google Sheets 연동 중 심각한 오류 발생:', error);
+    }
+
+    // 3. 첨부파일 없이 알림 이메일만 전송
+    console.log("[Email] 이메일 전송 시도...");
     const transporter = nodemailer.createTransport({
         service: 'gmail',
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
-        auth: {
-            // 여기에 실제 이메일 전송에 사용할 구글 계정 정보를 입력해야 합니다.
-            // 주의: 앱 비밀번호를 사용하는 것이 안전합니다.
-            user: 'YOUR_GMAIL_ADDRESS@gmail.com',
-            pass: 'YOUR_GMAIL_APP_PASSWORD'
-        },
+        auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS },
     });
-
-    // 2. 이메일 내용 구성
+    
+    const sheetUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}`;
     const mailOptions = {
-        from: 'YOUR_GMAIL_ADDRESS@gmail.com',
-        to: 'y1208kr@gmail.com', // 수신자 이메일 주소
-        subject: `[AI 면접 결과] ${participantName}님의 면접 결과입니다.`,
-        html: `
-            <h2>AI 면접 결과가 제출되었습니다.</h2>
-            <p><strong>참가자:</strong> ${participantName}</p>
-            <p><strong>제출 시각:</strong> ${new Date().toLocaleString('ko-KR')}</p>
-            <p>첨부된 파일들을 확인해주세요.</p>
-        `,
-        attachments: files.map(file => ({
-            filename: file.originalname, // 원래 파일 이름으로 첨부
-            path: file.path, // 임시 저장된 파일의 경로
-        })),
+        from: process.env.GMAIL_USER,
+        to: 'y1208kr@gmail.com',
+        subject: `[AI 면접 결과 제출] ${participantName}님의 응답이 도착했습니다.`,
+        html: `... (이메일 내용 생략) ...`,
     };
 
-    // 3. 이메일 전송
     transporter.sendMail(mailOptions, (error, info) => {
-        // 전송 후 임시 파일 삭제
-        files.forEach(file => {
-            fs.unlink(file.path, err => {
-                if (err) console.error(`임시 파일 삭제 실패: ${file.path}`, err);
-            });
-        });
-
+        files.forEach(file => fs.unlinkSync(file.path));
         if (error) {
             console.error('이메일 전송 실패:', error);
             return res.status(500).send('서버에서 이메일 전송에 실패했습니다.');
         }
-        
         console.log('이메일 전송 성공:', info.response);
         res.status(200).send('성공적으로 제출되어 연구자에게 전달되었습니다.');
     });
 });
 
-// 서버 실행
 app.listen(port, () => {
     console.log(`서버가 http://localhost:${port} 에서 실행 중입니다.`);
-    // 'uploads' 폴더가 없으면 생성
-    if (!fs.existsSync('uploads')) {
-        fs.mkdirSync('uploads');
-    }
+    if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 });
+
