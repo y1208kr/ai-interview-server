@@ -1,5 +1,6 @@
 /*
  * Google Drive 및 Sheets 연동 과정을 추적하기 위해 상세한 로그를 추가한 버전입니다.
+ * [V2] 시작 시 필수 환경 변수를 체크하는 로직이 추가되었습니다.
  */
 const express = require('express');
 const multer = require('multer');
@@ -13,6 +14,24 @@ const { google } = require('googleapis');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// --- 시작 전 필수 환경 변수 확인 ---
+const requiredEnvVars = [
+    'SPREADSHEET_ID',
+    'GOOGLE_SERVICE_ACCOUNT_EMAIL',
+    'GOOGLE_PRIVATE_KEY',
+    'GOOGLE_DRIVE_FOLDER_ID',
+    'GMAIL_USER',
+    'GMAIL_PASS'
+];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+    console.error(`[FATAL ERROR] 서버 시작 실패! 아래의 필수 환경 변수가 설정되지 않았습니다:`);
+    console.error(missingVars.join(', '));
+    console.error("Render.com 대시보드의 'Environment' 메뉴에서 변수 설정을 확인해주세요.");
+    process.exit(1); // 오류와 함께 프로세스 종료
+}
 
 app.use(cors());
 const upload = multer({ dest: 'uploads/' });
