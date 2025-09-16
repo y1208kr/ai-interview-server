@@ -1,0 +1,15 @@
+# Render.com 서버를 위한 자동 설정 파일입니다.
+services:
+  - type: web # 이것은 웹 서버입니다.
+    name: ai-interview-server # 서버 이름
+    env: node # Node.js 환경을 사용합니다.
+    plan: free # 무료 플랜을 사용합니다.
+    buildCommand: "npm install" # 빌드 명령어: 필요한 부품들을 설치합니다.
+    startCommand: "node server_example.js" # 시작 명령어: 서버를 켭니다.
+    envVars: # 아래의 환경 변수들이 필요합니다.
+      - key: SPREADSHEET_ID
+      - key: GOOGLE_DRIVE_FOLDER_ID
+      - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
+      - key: GOOGLE_PRIVATE_KEY
+      - key: GMAIL_USER
+      - key: GMAIL_PASS
