@@ -1,8 +1,6 @@
 /*
- * [V14 FINAL-STABILITY-UPDATE] Bitly URL 단축 기능을 제거하여 서버 안정성을 확보하고,
- * 데이터 구조 처리 방식을 개선하여 데이터 밀림 및 인코딩 오류를 해결한 최종 버전입니다.
- * [V15 ENCODING-TIMESTAMP-FIX] 서버로 들어오는 모든 텍스트 데이터에 대해 인코딩 복원 로직을
- * 적용하고, timestamp를 CSV와 호환되는 ISO 문자열로 저장하여 데이터 누락 문제를 해결합니다.
+ * [V17 FINAL-DEBUGGING-FIX] 모든 텍스트 데이터에 대해 인코딩 복원 로직을
+ * 적용하고, 각 필드의 복원 전/후를 로그에 명확히 기록하여 최종 디버깅을 수행합니다.
  */
 const express = require('express');
 const multer = require('multer');
@@ -51,27 +49,29 @@ const upload = multer({ dest: 'uploads/' });
 // --- 서버 메인 로직 ---
 app.post('/upload-and-email', upload.any(), async (req, res) => {
     console.log("\n///////////////////////////////////////////////////////////");
-    console.log("[Request] 새로운 면접 결과 요청을 받았습니다.");
+    console.log(`[V17-DEBUG] 새로운 면접 결과 요청을 받았습니다.`);
 
     const files = req.files;
-    const timestamp = new Date().toISOString(); // [FIX] CSV 호환을 위해 ISO 문자열 사용
+    const timestamp = new Date().toISOString();
 
-    // [FIX] req.body의 모든 문자열 필드에 대해 인코딩 복원을 적용합니다.
+    // [FINAL DEBUGGING FIX]
+    console.log('[Encoding] 수신된 텍스트 필드 인코딩 복원을 시작합니다...');
     const participantData = {};
     for (const key in req.body) {
         const value = req.body[key];
-        // 값이 문자열인 경우에만 인코딩 복원 시도
         if (typeof value === 'string') {
             const restoredValue = Buffer.from(value, 'latin1').toString('utf8');
+            console.log(`[Encoding]  - KEY: ${key}, ORIGINAL: "${value}", RESTORED: "${restoredValue}"`);
             participantData[key] = restoredValue;
         } else {
             participantData[key] = value;
         }
     }
+    console.log('[Encoding] 인코딩 복원 완료.');
 
     const participantName = participantData.name || 'UnknownParticipant';
     const docId = `${timestamp}_${participantName}`;
-    console.log(`[Request] 참가자 이름: ${participantName} (인코딩 복원 완료)`);
+    console.log(`[Request] 참가자 이름: ${participantName}`);
 
     const fileLinks = {};
     let isSuccess = true;
@@ -82,7 +82,7 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
         for (const file of files) {
             const originalFilename = Buffer.from(file.originalname, 'latin1').toString('utf8');
             const destination = `results/${docId}/${originalFilename}`;
-            console.log(`[Storage] '${originalFilename}' 업로드 시도... (경로: ${destination})`);
+            console.log(`[Storage] '${originalFilename}' 업로드 시도...`);
             
             await bucket.upload(file.path, {
                 destination: destination,
@@ -92,17 +92,19 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
             const uploadedFile = bucket.file(destination);
             const [url] = await uploadedFile.getSignedUrl({
                 action: 'read',
-                expires: '03-09-2491' // 먼 미래 날짜로 설정하여 사실상 만료되지 않게 함
+                expires: '03-09-2491'
             });
-
             console.log(`[Storage] '${originalFilename}' 업로드 및 링크 생성 성공.`);
             
             let key;
-            if (file.fieldname.includes('audio')) {
-                const qNum = file.fieldname.split('_')[1];
-                key = `Audio_Q${qNum.toUpperCase()}`;
-            } else if (file.fieldname.includes('consent')) key = 'PDF_Consent';
-            else if (file.fieldname.includes('survey')) key = 'PDF_Survey';
+            if (file.fieldname.startsWith('audio_q_')) {
+                const qNum = file.fieldname.split('_')[2];
+                key = `Audio_Q${qNum}`;
+            } else if (file.fieldname.includes('consent')) {
+                key = 'PDF_Consent';
+            } else if (file.fieldname.includes('survey')) {
+                key = 'PDF_Survey';
+            }
             if (key) fileLinks[key] = url;
         }
         console.log("--- STEP 1: Firebase Storage 파일 업로드 완료 ---\n");
@@ -115,13 +117,7 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
     if (isSuccess) {
         try {
             console.log("--- STEP 2: Firestore 데이터 추가 시작 ---");
-
-            const newRow = { 
-                ...participantData,
-                ...fileLinks,
-                timestamp: timestamp // [FIX] ISO 문자열 timestamp 저장
-            };
-            
+            const newRow = { ...participantData, ...fileLinks, timestamp };
             await db.collection('interviewResults').doc(docId).set(newRow);
             console.log(`[Firestore] Document ID '${docId}' 로 데이터 추가 성공.`);
             console.log("--- STEP 2: Firestore 데이터 추가 완료 ---\n");
