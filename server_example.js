@@ -1,7 +1,6 @@
 /*
- * [V5 FINAL-DEBUG] Private Key 자동 교정 기능이 추가된 최종 디버깅 버전.
- * 이메일 전송 기능을 제외하고, 오직 Google Drive와 Sheets에만
- * 데이터를 안정적으로 저장하는 데 집중하는 최종 버전입니다.
+ * [V6 FINAL-FIX] 'supportsAllDrives: true' 플래그를 추가하여
+ * 공유 드라이브에서 발생하는 'storageQuotaExceeded' 오류를 해결하는 최종 버전입니다.
  */
 const express = require('express');
 const multer = require('multer');
@@ -34,7 +33,7 @@ console.log('[System] 모든 환경 변수가 설정된 것을 확인했습니�
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
 
-// [자동 교정 기능 추가] Private Key를 더 안전하게 처리합니다.
+// [자동 교정 기능] Private Key를 더 안전하게 처리합니다.
 let rawKey = (process.env.GOOGLE_PRIVATE_KEY || '').trim();
 if (rawKey.startsWith('"') && rawKey.endsWith('"')) {
     console.log('[Auth] Private Key를 감싸는 큰따옴표를 감지하여 자동으로 제거합니다.');
@@ -42,7 +41,6 @@ if (rawKey.startsWith('"') && rawKey.endsWith('"')) {
 }
 const GOOGLE_PRIVATE_KEY = rawKey.replace(/\\n/g, '\n');
 
-// Private Key 유효성 간단 체크
 if (!GOOGLE_PRIVATE_KEY.includes('BEGIN PRIVATE KEY')) {
   console.error('[FATAL ERROR] GOOGLE_PRIVATE_KEY 형식이 올바르지 않거나, 값이 비어있습니다.');
   process.exit(1);
@@ -83,20 +81,26 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
             console.log(`[Drive] '${file.originalname}' 업로드 시도...`);
             const driveResponse = await drive.files.create({
                 requestBody: { name: file.originalname, parents: [GOOGLE_DRIVE_FOLDER_ID] },
-                media: { mimeType: file.mimetype, body: fs.createReadStream(file.path) }
+                media: { mimeType: file.mimetype, body: fs.createReadStream(file.path) },
+                supportsAllDrives: true, // <-- ★★★★★★★★★★★★★★★★★★★★★★★★★★★★ 이 줄이 모든 문제의 해결책입니다.
             });
             await drive.permissions.create({
                 fileId: driveResponse.data.id,
-                requestBody: { role: 'reader', type: 'anyone' }
+                requestBody: { role: 'reader', type: 'anyone' },
+                supportsAllDrives: true, // 공유 드라이브 파일 권한 설정을 위해 필요합니다.
             });
-            const linkResponse = await drive.files.get({ fileId: driveResponse.data.id, fields: 'webViewLink' });
+            const linkResponse = await drive.files.get({ 
+                fileId: driveResponse.data.id, 
+                fields: 'webViewLink',
+                supportsAllDrives: true, // 공유 드라이브 파일 링크를 가져오기 위해 필요합니다.
+            });
             const link = linkResponse.data.webViewLink;
             console.log(`[Drive] '${file.originalname}' 업로드 및 링크 생성 성공.`);
 
             let key;
             if (file.fieldname.includes('audio')) {
-                const qNum = file.fieldname.split('_')[1]; // 'q1', 'q2' ...
-                key = `Audio_${qNum.toUpperCase()}`; // Audio_Q1, Audio_Q2 ...
+                const qNum = file.fieldname.split('_')[1];
+                key = `Audio_${qNum.toUpperCase()}`;
             }
             else if (file.fieldname.includes('consent')) key = 'PDF_Consent';
             else if (file.fieldname.includes('survey')) key = 'PDF_Survey';
@@ -117,16 +121,12 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
             const sheet = doc.sheetsByIndex[0];
             console.log(`[Sheets] '${sheet.title}' 시트 로딩 성공.`);
             const newRow = { ...participantInfo, ...participantInfo.surveyData, ...fileLinks };
-            delete newRow.surveyData; // 중복 데이터 정리
+            delete newRow.surveyData;
             
             const sheetHeaders = (sheet.headerValues || []);
             const finalRowData = {};
             sheetHeaders.forEach(header => {
-                if (newRow[header] !== undefined) {
-                    finalRowData[header] = newRow[header];
-                } else {
-                    finalRowData[header] = ''; 
-                }
+                finalRowData[header] = newRow[header] !== undefined ? newRow[header] : '';
             });
 
             await sheet.addRow(finalRowData, { insert: true });
