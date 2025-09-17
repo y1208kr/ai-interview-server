@@ -1,6 +1,8 @@
 /*
- * [V10 FINAL-STABILITY-UPDATE] Bitly URL 단축 기능을 제거하여 서버 안정성을 확보하고,
+ * [V14 FINAL-STABILITY-UPDATE] Bitly URL 단축 기능을 제거하여 서버 안정성을 확보하고,
  * 데이터 구조 처리 방식을 개선하여 데이터 밀림 및 인코딩 오류를 해결한 최종 버전입니다.
+ * [V15 ENCODING-TIMESTAMP-FIX] 서버로 들어오는 모든 텍스트 데이터에 대해 인코딩 복원 로직을
+ * 적용하고, timestamp를 CSV와 호환되는 ISO 문자열로 저장하여 데이터 누락 문제를 해결합니다.
  */
 const express = require('express');
 const multer = require('multer');
@@ -46,30 +48,28 @@ const bucket = admin.storage().bucket();
 app.use(cors());
 const upload = multer({ dest: 'uploads/' });
 
-/**
- * UTF-8 문자가 latin1(ISO-8859-1)으로 잘못 해석되어 깨졌을 때(Mojibake) 복원하는 함수.
- * @param {string} brokenString - 깨진 문자열
- * @returns {string} 복원된 문자열
- */
-function fixEncoding(brokenString) {
-    try {
-        const buffer = Buffer.from(brokenString, 'latin1');
-        return buffer.toString('utf8');
-    } catch (e) {
-        console.error('[Encoding] 문자열 복원 중 오류 발생:', e);
-        return brokenString;
-    }
-}
-
 // --- 서버 메인 로직 ---
 app.post('/upload-and-email', upload.any(), async (req, res) => {
     console.log("\n///////////////////////////////////////////////////////////");
     console.log("[Request] 새로운 면접 결과 요청을 받았습니다.");
 
     const files = req.files;
-    const participantInfoRaw = JSON.parse(fixEncoding(req.body.participantInfo));
-    const participantName = participantInfoRaw.name || 'UnknownParticipant';
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date().toISOString(); // [FIX] CSV 호환을 위해 ISO 문자열 사용
+
+    // [FIX] req.body의 모든 문자열 필드에 대해 인코딩 복원을 적용합니다.
+    const participantData = {};
+    for (const key in req.body) {
+        const value = req.body[key];
+        // 값이 문자열인 경우에만 인코딩 복원 시도
+        if (typeof value === 'string') {
+            const restoredValue = Buffer.from(value, 'latin1').toString('utf8');
+            participantData[key] = restoredValue;
+        } else {
+            participantData[key] = value;
+        }
+    }
+
+    const participantName = participantData.name || 'UnknownParticipant';
     const docId = `${timestamp}_${participantName}`;
     console.log(`[Request] 참가자 이름: ${participantName} (인코딩 복원 완료)`);
 
@@ -80,7 +80,7 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
     try {
         console.log("\n--- STEP 1: Firebase Storage 파일 업로드 시작 ---");
         for (const file of files) {
-            const originalFilename = fixEncoding(file.originalname);
+            const originalFilename = Buffer.from(file.originalname, 'latin1').toString('utf8');
             const destination = `results/${docId}/${originalFilename}`;
             console.log(`[Storage] '${originalFilename}' 업로드 시도... (경로: ${destination})`);
             
@@ -92,7 +92,7 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
             const uploadedFile = bucket.file(destination);
             const [url] = await uploadedFile.getSignedUrl({
                 action: 'read',
-                expires: '03-09-2491'
+                expires: '03-09-2491' // 먼 미래 날짜로 설정하여 사실상 만료되지 않게 함
             });
 
             console.log(`[Storage] '${originalFilename}' 업로드 및 링크 생성 성공.`);
@@ -100,7 +100,7 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
             let key;
             if (file.fieldname.includes('audio')) {
                 const qNum = file.fieldname.split('_')[1];
-                key = `Audio_${qNum.toUpperCase()}`;
+                key = `Audio_Q${qNum.toUpperCase()}`;
             } else if (file.fieldname.includes('consent')) key = 'PDF_Consent';
             else if (file.fieldname.includes('survey')) key = 'PDF_Survey';
             if (key) fileLinks[key] = url;
@@ -111,20 +111,15 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
         isSuccess = false;
     }
 
-    // --- STEP 2: Firestore 데이터 추가 (데이터 구조 개선) ---
+    // --- STEP 2: Firestore 데이터 추가 ---
     if (isSuccess) {
         try {
             console.log("--- STEP 2: Firestore 데이터 추가 시작 ---");
 
-            // [FIX] 데이터 밀림 및 깨짐 현상 해결을 위한 안정적인 구조
-            const surveyData = participantInfoRaw.surveyData || {};
-            delete participantInfoRaw.surveyData; // 원본에서 surveyData 객체 제거
-
             const newRow = { 
-                ...participantInfoRaw, // 순수 인적 정보
-                ...surveyData,         // 설문 데이터
-                ...fileLinks,          // 파일 링크
-                timestamp: admin.firestore.FieldValue.serverTimestamp()
+                ...participantData,
+                ...fileLinks,
+                timestamp: timestamp // [FIX] ISO 문자열 timestamp 저장
             };
             
             await db.collection('interviewResults').doc(docId).set(newRow);
