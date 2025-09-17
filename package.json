@@ -1,17 +1,17 @@
 {
   "name": "ai-interview-server",
   "version": "1.0.0",
-  "description": "AI Interview data processing server.",
+  "description": "Server for AI Interview Experiment using Firebase",
   "main": "server_example.js",
   "scripts": {
     "start": "node server_example.js"
   },
+  "author": "",
+  "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "multer": "^1.4.5-lts.1",
-    "google-spreadsheet": "^4.1.2",
-    "google-auth-library": "^9.6.3",
-    "googleapis": "^132.0.0"
+    "firebase-admin": "^12.1.1",
+    "multer": "^1.4.5-lts.1"
   }
 }
