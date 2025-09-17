@@ -177,7 +177,6 @@
             .timer { font-size: 2em; }
             .form-grid { grid-template-columns: 1fr; }
         }
-
     </style>
 </head>
 <body>
@@ -201,7 +200,7 @@
             "팀의 일원으로서 효과적으로 협업했던 경험에 대해 말씀해 주십시오."
         ];
         
-        const totalSteps = 7; // 전체 단계 수
+        const totalSteps = 7; // 전체 단계 수: 동의 > 정보입력 > 안내 > 질문1 > 질문2 > 질문3 > 설문
         let currentStep = 0;
         
         // --- Global State ---
@@ -211,7 +210,7 @@
         let mediaRecorder;
         let audioStream = null;
         let prepTimerInterval, recordingTimerInterval, minRecTimerInterval;
-        let audioContext, analyser;
+        let audioContext, analyser, drawVisual;
         const MIN_RECORDING_SECONDS = 20;
 
         // --- Core Application Logic ---
@@ -238,18 +237,18 @@
 
         function showScreen(screenId) {
             const container = document.getElementById('container');
-            
+
             // 진행률 업데이트
             switch(screenId) {
                 case 'startScreen': currentStep = 1; break;
                 case 'infoScreen': currentStep = 2; break;
                 case 'introScreen': currentStep = 3; break;
-                case 'questionScreen': currentStep = 3 + currentQuestionIndex + 1; break;
+                case 'questionScreen': currentStep = 3 + currentQuestionIndex + 1; break; // 질문 1,2,3 -> 4,5,6단계
                 case 'surveyScreen': currentStep = 7; break;
             }
-            
+
             // 진행률 바 HTML
-            const progressHTML = screenId !== 'finalCompleteScreen' ? `
+            const progressHTML = (screenId !== 'finalCompleteScreen' && screenId !== '') ? `
                 <div class="progress-text"></div>
                 <div class="progress-bar">
                     <div class="progress-fill"></div>
@@ -258,7 +257,7 @@
             
             container.innerHTML = progressHTML + getScreenHTML(screenId);
             updateProgress();
-            
+
             if (screenId === 'startScreen') {
                 document.getElementById('consentCheck1').addEventListener('change', checkAllConsents);
                 document.getElementById('consentCheck2').addEventListener('change', checkAllConsents);
@@ -266,6 +265,9 @@
                 startPrepTimer();
             } else if (screenId === 'surveyScreen') {
                 updateSurveyProgress();
+                // 설문 폼 내 라디오 버튼에 이벤트 리스너 추가
+                const radios = document.querySelectorAll('.survey-form-container input[type="radio"]');
+                radios.forEach(radio => radio.addEventListener('change', updateSurveyProgress));
             }
         }
         
@@ -275,13 +277,13 @@
                     return `
                         <h1>AI 면접 실험 참여 안내</h1>
                         <div class="consent-form">
-                            <h3>📋 연구 참여 동의서</h3>
+                            <h3>연구 참여 동의서</h3>
                             <p>안녕하세요. 본 연구는 "AI 면접의 상호작용 공정성이 조직 매력도에 미치는 영향"을 주제로 하는 실험 연구입니다. (연구책임자: ${researcherName})</p>
                             <p>잠시 시간을 내어 연구에 참여해주시면, AI 채용 시스템의 발전에 기여하는 소중한 데이터로 활용될 것입니다. 참여 과정에서 경험하시는 모든 내용은 익명으로 처리되오니 편안한 마음으로 임해주십시오.</p>
-                            <p style="font-weight: bold; color: #007bff;">💰 설문 문항이나 녹음 등 조사를 성실히 수행해주셨다고 판단되면, 감사의 의미로 소정의 사례비(3만원)를 드립니다.</p>
+                            <p style="font-weight: bold; color: #007bff;">설문 문항이나 녹음 등 조사를 성실히 수행해주셨다고 판단되면, 감사의 의미로 소정의 사례비(3만원)를 드립니다.</p>
                             <p style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 5px;">
-                                <strong>⏱️ 예상 소요 시간:</strong> 약 15-20분<br>
-                                <strong>🎤 준비 사항:</strong> 마이크가 연결된 조용한 환경
+                                <strong>예상 소요 시간:</strong> 약 15-20분<br>
+                                <strong>준비 사항:</strong> 마이크가 연결된 조용한 환경
                             </p>
                         </div>
                          <div class="checkbox-container">
@@ -289,7 +291,7 @@
                             <label for="consentCheck1">위 내용을 모두 확인했으며, 연구 참여에 동의합니다.</label>
                         </div>
                         <div class="consent-form">
-                            <h3>🔐 개인정보 수집·이용 동의서</h3>
+                            <h3>개인정보 수집·이용 동의서</h3>
                             <p><strong>1. 수집·이용 목적:</strong> 학술 연구 목적의 통계 분석 및 사례비 지급</p>
                             <p><strong>2. 수집 항목:</strong> [필수] 이름, 성별, 연령대, 직업상태, 전공계열, AI면접경험, AI기술 인식, 음성녹음파일, 전화번호, 은행명, 계좌번호</p>
                             <p><strong>3. 보유 및 이용 기간:</strong> 연구 종료 후 3년 (이후 즉시 파기)</p>
@@ -307,7 +309,7 @@
                     return `
                         <h1>참가자 정보 입력</h1>
                         <div class="info-form">
-                            <form id="participantForm">
+                            <form id="participantForm" novalidate>
                                 <div class="form-grid">
                                     <div class="form-group">
                                         <label for="name">이름 <span class="required">*</span></label>
@@ -362,12 +364,12 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="phone">전화번호 <span class="required">*</span>
-                                            <span class="tooltip"> ℹ️
+                                            <span class="tooltip">?
                                                 <span class="tooltiptext">사례비 지급 확인용입니다</span>
                                             </span>
                                         </label>
-                                        <input type="tel" id="phone" name="phone" required placeholder="010-1234-5678" 
-                                               pattern="[0-9]{3}-[0-9]{4}-[0-9]{4}">
+                                        <input type="tel" id="phone" name="phone" required placeholder="010-1234-5678"
+                                                pattern="[0-9]{3}-[0-9]{3,4}-[0-9]{4}">
                                         <span class="helper-text">형식: 010-1234-5678</span>
                                     </div>
                                     <div class="form-group">
@@ -376,8 +378,8 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="accountNumber">계좌번호 <span class="required">*</span></label>
-                                        <input type="text" id="accountNumber" name="accountNumber" required 
-                                               placeholder="'-' 포함하여 입력">
+                                        <input type="text" id="accountNumber" name="accountNumber" required
+                                                placeholder="'-' 포함하여 입력">
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -403,12 +405,12 @@
                     return `
                         <h1>AI 면접 안내</h1>
                         <div class="ai-message">
-                            <h3 style="margin-bottom: 15px;">🤖 면접 진행 방식</h3>
+                            <h3 style="margin-bottom: 15px;">면접 진행 방식</h3>
                             <ul style="list-style: none; padding: 0;">
-                                <li style="margin: 10px 0;">📝 총 3개의 질문이 제시됩니다</li>
-                                <li style="margin: 10px 0;">⏱️ 각 질문마다 1분의 준비 시간이 주어집니다</li>
-                                <li style="margin: 10px 0;">🎤 최소 20초 ~ 최대 1분 30초 동안 답변을 녹음합니다</li>
-                                <li style="margin: 10px 0;">✅ 모든 답변 후 간단한 설문이 있습니다</li>
+                                <li style="margin: 10px 0;">총 3개의 질문이 제시됩니다</li>
+                                <li style="margin: 10px 0;">각 질문마다 1분의 준비 시간이 주어집니다</li>
+                                <li style="margin: 10px 0;">최소 20초 ~ 최대 1분 30초 동안 답변을 녹음합니다</li>
+                                <li style="margin: 10px 0;">모든 답변 후 간단한 설문이 있습니다</li>
                             </ul>
                             <p style="margin-top: 20px; font-weight: bold;">준비되셨나요? 그럼 시작하겠습니다.</p>
                         </div>
@@ -417,8 +419,8 @@
                         </div>
                     `;
                  case 'questionScreen':
-                    const q_intro = currentQuestionIndex === 0 ? "첫 번째 질문입니다." : 
-                                   (currentQuestionIndex === 1 ? "두 번째 질문입니다." : "마지막 질문입니다.");
+                    const q_intro = currentQuestionIndex === 0 ? "첫 번째 질문입니다." :
+                                    (currentQuestionIndex === 1 ? "두 번째 질문입니다." : "마지막 질문입니다.");
                     return `
                         <h1>면접 질문 ${currentQuestionIndex + 1}/3</h1>
                         <div class="ai-message">${q_intro}</div>
@@ -427,7 +429,7 @@
                             <p style="font-size: 1.2em; line-height: 1.8;">${questions[currentQuestionIndex]}</p>
                         </div>
                         <div class="prep-timer" id="prepTimer">
-                            <h3>⏳ 답변 준비 시간</h3>
+                            <h3>답변 준비 시간</h3>
                             <div class="timer" id="prepTimerDisplay">01:00</div>
                             <p style="margin-top: 10px; font-size: 0.9em;">준비 시간 동안 답변을 구상해주세요</p>
                         </div>
@@ -436,8 +438,419 @@
                                 답변 녹음 시작
                             </button>
                             <button class="btn btn-secondary" onclick="skipPrep()" id="skipBtn">
-                                준비됐어요 (준비 시간 건너뛰기)
+                                준비됐어요
                             </button>
                         </div>
                     `;
-                case 'recording
+                case 'recordingScreen':
+                    return `
+                        <h1>답변 녹음 중 (${currentQuestionIndex + 1}/3)</h1>
+                        <div class="question-box">
+                           <div class="question-number">질문 ${currentQuestionIndex + 1}</div>
+                           <p>${questions[currentQuestionIndex]}</p>
+                        </div>
+                        <div style="text-align: center; margin-top: 20px;">
+                           <div class="recording-status active">녹음 중</div>
+                           <div class="audio-level" id="audioLevel">
+                               <div class="audio-level-fill" id="audioLevelFill"></div>
+                           </div>
+                           <div class="timer" id="recordingTimer">00:00 / 01:30</div>
+                           <div class="min-rec-timer" id="minRecTimer"></div>
+                        </div>
+                        <div style="text-align: center; margin-top: 20px;">
+                           <button class="btn" id="stopRecBtn" onclick="stopRecording()" disabled>녹음 완료</button>
+                        </div>
+                    `;
+                case 'surveyScreen':
+                    return `
+                        <h1>사후 설문조사</h1>
+                        <p class="ai-message">면접 경험을 바탕으로, 아래 각 문항에 대해 귀하의 생각과 가장 가까운 번호에 체크해주세요.</p>
+                        <div class="survey-progress" id="surveyProgress"></div>
+                        <div class="survey-form-container">
+                            <form id="surveyForm">
+                                <div class="survey-group">
+                                    <h3>면접관(시스템)과의 상호작용</h3>
+                                    ${generateSurveyItems('ij', ['면접관(시스템)은 저를 존중하는 태도로 대했습니다.', '면접관(시스템)은 저에게 예의를 갖추어 대했습니다.', '면접관(시스템)은 저에게 부적절하거나 무례한 발언을 하지 않았습니다.', '면접관(시스템)은 저를 대할 때 개인적인 편견 없이 대했습니다.', '면접관(시스템)은 면접 절차에 대해 솔직하게 설명해 주었습니다.', '면접관(시스템)은 면접 절차에 대한 설명을 시의적절하게 제공했습니다.', '면접관(시스템)이 제공한 설명은 합리적으로 이해가 되었습니다.', '면접관(시스템)은 제가 궁금해할 만한 사항에 대해 충분한 정보를 제공했습니다.', '면접관(시스템)은 평가가 이루어지는 방식에 대해 명확하게 설명해 주었습니다.'])}
+                                </div>
+                                <div class="survey-group">
+                                    <h3>면접 절차 및 과정</h3>
+                                    ${generateSurveyItems('pj', ['면접 과정에서 제 견해나 의견을 표현할 기회를 가졌습니다.', '면접 절차는 모든 지원자에게 일관성 있게 적용되었을 것이라고 생각합니다.', '면접 절차는 개인적인 편견 없이 중립적으로 진행되었다고 생각합니다.', '면접 평가는 정확한 정보에 근거하여 이루어졌을 것이라고 생각합니다.', '만약 잘못된 평가가 내려졌을 경우, 이를 수정할 수 있는 공식적인 절차가 마련되어 있었을 것입니다.', '면접 절차는 채용 과정 전반의 가치와 윤리를 대표한다고 생각합니다.', '면접 절차는 일반적인 윤리 및 도덕 기준에 부합했습니다.'])}
+                                </div>
+                                <div class="survey-group">
+                                    <h3>면접 경험 후 기업에 대한 생각</h3>
+                                    ${generateSurveyItems('oa', ['이 회사는 일하기에 매력적인 곳이라고 생각합니다.', '이 회사에 대해 긍정적인 인상을 갖게 되었습니다.', '전반적으로, 이 회사를 높이 평가합니다.'])}
+                                </div>
+                                 <div style="text-align: center;">
+                                    <button type="button" class="btn" onclick="submitSurvey()">최종 제출하기</button>
+                                </div>
+                            </form>
+                        </div>
+                    `;
+                case 'finalCompleteScreen':
+                    return `
+                        <div style="text-align: center; padding: 40px;">
+                            <div class="loading-spinner" id="finalSpinner"></div>
+                            <div id="finalContent" style="display:none;">
+                                <h1 style="font-size: 2.5em; margin-bottom: 20px; background: none;">완료</h1>
+                                <h2>모든 실험이 완료되었습니다</h2>
+                                <p class="ai-message" style="margin-top: 20px; border-left-color: #28a745;">연구에 참여해주셔서 진심으로 감사합니다. 귀하의 소중한 데이터는 학술 발전에 큰 도움이 될 것입니다.</p>
+                                <p>창을 닫아주세요.</p>
+                            </div>
+                        </div>
+                    `;
+            }
+        }
+        
+        function generateSurveyItems(prefix, items) {
+            let html = '';
+            items.forEach((item, index) => {
+                const name = `${prefix}${index + 1}`;
+                html += `
+                    <div class="survey-item">
+                        <p>${index + 1}. ${item}</p>
+                        <ul class="likert-scale">
+                            <li><label for="${name}_1">전혀<br>아니다</label><input type="radio" id="${name}_1" name="${name}" value="1" required></li>
+                            <li><label for="${name}_2">2</label><input type="radio" id="${name}_2" name="${name}" value="2"></li>
+                            <li><label for="${name}_3">3</label><input type="radio" id="${name}_3" name="${name}" value="3"></li>
+                            <li><label for="${name}_4">보통</label><input type="radio" id="${name}_4" name="${name}" value="4"></li>
+                            <li><label for="${name}_5">5</label><input type="radio" id="${name}_5" name="${name}" value="5"></li>
+                            <li><label for="${name}_6">6</label><input type="radio" id="${name}_6" name="${name}" value="6"></li>
+                            <li><label for="${name}_7">매우<br>그렇다</label><input type="radio" id="${name}_7" name="${name}" value="7"></li>
+                        </ul>
+                    </div>
+                `;
+            });
+            return html;
+        }
+
+        function updateSurveyProgress() {
+            const progress = document.getElementById('surveyProgress');
+            if (!progress) return;
+
+            const totalQuestions = document.querySelectorAll('.survey-item').length;
+            const answeredQuestions = document.querySelectorAll('.survey-item input[type="radio"]:checked').length;
+            
+            progress.textContent = `응답률: ${answeredQuestions} / ${totalQuestions}`;
+        }
+
+
+        // --- Event Handlers & Logic ---
+        function checkAllConsents() {
+            const consent1 = document.getElementById('consentCheck1').checked;
+            const consent2 = document.getElementById('consentCheck2').checked;
+            document.getElementById('startBtn').disabled = !(consent1 && consent2);
+        }
+
+        async function requestMicPermission() {
+            try {
+                audioStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { echoCancellation: true, noiseSuppression: true } 
+                });
+                audioStream.getTracks().forEach(track => track.stop());
+                audioStream = null;
+                showScreen('infoScreen');
+            } catch (err) {
+                console.error('마이크 접근 오류:', err);
+                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요. 권한 설정 후 페이지를 새로고침해야 할 수 있습니다.');
+            }
+        }
+
+        function startInterview() {
+            const form = document.getElementById('participantForm');
+            if (!form.checkValidity()) {
+                showModal('모든 필수 정보를 올바른 형식으로 입력해주세요.');
+                // Highlight first invalid field
+                for (let i = 0; i < form.elements.length; i++) {
+                    if (!form.elements[i].checkValidity()) {
+                        form.elements[i].focus();
+                        break;
+                    }
+                }
+                return;
+            }
+            
+            const formData = new FormData(form);
+            for (let [key, value] of formData.entries()) {
+                participantInfo[key] = value;
+            }
+            
+            participantInfo.condition = 'general_ai';
+            
+            showScreen('introScreen');
+        }
+
+        function startFirstQuestion() { showScreen('questionScreen'); }
+        
+        function skipPrep() {
+            clearInterval(prepTimerInterval);
+            startRecording();
+        }
+
+        function startPrepTimer() {
+            let seconds = 60;
+            const timerDisplay = document.getElementById('prepTimerDisplay');
+            const recordBtn = document.getElementById('recordBtn');
+            const skipBtn = document.getElementById('skipBtn');
+            
+            prepTimerInterval = setInterval(() => {
+                seconds--;
+                const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const secs = (seconds % 60).toString().padStart(2, '0');
+                timerDisplay.textContent = `${minutes}:${secs}`;
+                
+                if (seconds <= 10) {
+                    timerDisplay.classList.add('warning');
+                }
+
+                if (seconds <= 0) {
+                    clearInterval(prepTimerInterval);
+                    timerDisplay.classList.remove('warning');
+                    recordBtn.disabled = false;
+                    skipBtn.style.display = 'none';
+                    document.getElementById('prepTimer').innerHTML = '<h3 style="color: #28a745;">준비 시간이 종료되었습니다.</h3>';
+                    startRecording(); // 자동으로 녹음 시작
+                }
+            }, 1000);
+        }
+
+        async function startRecording() {
+            clearInterval(prepTimerInterval);
+            const recordBtn = document.getElementById('recordBtn');
+            if (recordBtn) recordBtn.disabled = true;
+
+            try {
+                audioStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+                });
+                
+                showScreen('recordingScreen');
+                setupAudioVisualizer();
+
+                let audioChunks = [];
+                
+                mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    cancelAnimationFrame(drawVisual); // 시각화 중지
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    allAudioBlobs.push(audioBlob);
+                    if (audioStream) {
+                        audioStream.getTracks().forEach(track => track.stop());
+                        audioStream = null;
+                    }
+                };
+
+                mediaRecorder.start();
+                startRecordingTimer();
+            } catch (err) {
+                console.error('마이크 접근 오류:', err);
+                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요.');
+                showScreen('questionScreen');
+            }
+        }
+
+        function setupAudioVisualizer() {
+            const audioLevel = document.getElementById('audioLevel');
+            const audioLevelFill = document.getElementById('audioLevelFill');
+            if(!audioLevel || !audioLevelFill) return;
+
+            audioLevel.classList.add('active');
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            const source = audioContext.createMediaStreamSource(audioStream);
+            source.connect(analyser);
+
+            analyser.fftSize = 256;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            function draw() {
+                drawVisual = requestAnimationFrame(draw);
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for(let i = 0; i < bufferLength; i++) {
+                    sum += dataArray[i];
+                }
+                let avg = sum / bufferLength;
+                let volume = Math.min(100, (avg / 128) * 100 * 2);
+                audioLevelFill.style.width = volume + '%';
+            }
+            draw();
+        }
+
+
+        function startRecordingTimer() {
+            let seconds = 0;
+            const timerDisplay = document.getElementById('recordingTimer');
+            const stopRecBtn = document.getElementById('stopRecBtn');
+            const minRecTimerDisp = document.getElementById('minRecTimer');
+            
+            let minRecSeconds = MIN_RECORDING_SECONDS;
+            minRecTimerDisp.textContent = `최소 녹음 시간까지 ${minRecSeconds}초 남았습니다.`;
+            
+            minRecTimerInterval = setInterval(() => {
+                 minRecSeconds--;
+                 if(minRecSeconds > 0){
+                    minRecTimerDisp.textContent = `최소 녹음 시간까지 ${minRecSeconds}초 남았습니다.`;
+                 } else {
+                     clearInterval(minRecTimerInterval);
+                     minRecTimerDisp.textContent = '이제 녹음을 완료할 수 있습니다.';
+                     stopRecBtn.disabled = false;
+                 }
+            }, 1000);
+
+            recordingTimerInterval = setInterval(() => {
+                seconds++;
+                const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const secs = (seconds % 60).toString().padStart(2, '0');
+                timerDisplay.textContent = `${mins}:${secs} / 01:30`;
+                
+                if (seconds >= 80) { // 종료 10초 전
+                    timerDisplay.classList.add('warning');
+                }
+
+                if (seconds >= 90) {
+                    stopRecording();
+                }
+            }, 1000);
+        }
+
+        function stopRecording() {
+            clearInterval(recordingTimerInterval);
+            clearInterval(minRecTimerInterval);
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+
+            currentQuestionIndex++;
+            if (currentQuestionIndex < questions.length) {
+                showScreen('questionScreen');
+            } else {
+                completeInterview();
+            }
+        }
+        
+        function completeInterview() {
+            showScreen('surveyScreen');
+        }
+
+        async function submitSurvey() {
+            const form = document.getElementById('surveyForm');
+            if (!form.checkValidity()) {
+                showModal("모든 설문 문항에 답변해주세요.");
+                return;
+            }
+            
+            showScreen('finalCompleteScreen');
+            
+            // 데이터를 FormData 객체에 담습니다
+            const finalData = new FormData();
+            
+            // 1. 인적 정보 추가
+            for(const key in participantInfo){
+                finalData.append(key, participantInfo[key]);
+            }
+            
+            // 2. 설문 정보 추가
+            const surveyFormData = new FormData(form);
+            for(const [key, value] of surveyFormData.entries()){
+                finalData.append(key, value);
+            }
+            
+            // 3. 오디오 파일 추가
+            allAudioBlobs.forEach((blob, index) => {
+                const participantName = participantInfo.name || 'participant';
+                finalData.append(`audio_q_${index+1}`, blob, `${participantName}_q${index+1}_audio.webm`);
+            });
+            
+            // 4. PDF 파일 생성 및 추가
+            try {
+                const { jsPDF } = window.jspdf;
+                const participantName = participantInfo.name || 'participant';
+
+                // PDF 1: 동의서 및 인적 정보
+                const consentDoc = new jsPDF({ format: 'a4' });
+                consentDoc.addFont('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/Pretendard-Regular.ttf', 'Pretendard', 'normal');
+                consentDoc.setFont('Pretendard', 'normal');
+                consentDoc.setFontSize(16);
+                consentDoc.text("연구 참여 및 개인정보 수집·이용 동의서", 105, 20, { align: 'center' });
+                
+                let y = 40;
+                consentDoc.setFontSize(11);
+                consentDoc.text(`- 참가자 이름: ${participantName}`, 20, y); y+=10;
+                consentDoc.text(`- 연구 참여 동의: 예`, 20, y); y+=10;
+                consentDoc.text(`- 개인정보 수집 동의: 예`, 20, y); y+=15;
+
+                consentDoc.setFontSize(14);
+                consentDoc.text("참가자 인적 정보", 20, y); y+=10;
+                consentDoc.setFontSize(11);
+
+                for(const key in participantInfo) {
+                     if (key !== 'condition') {
+                       let text = `${key}: ${participantInfo[key]}`;
+                       if (y > 280) { consentDoc.addPage(); y = 20; }
+                       consentDoc.text(text, 20, y);
+                       y += 8;
+                    }
+                }
+                const consentPdfBlob = consentDoc.output('blob');
+                finalData.append('consent_info_pdf', consentPdfBlob, `${participantName}_consent_info.pdf`);
+
+                // PDF 2: 설문조사
+                const surveyDoc = new jsPDF({ format: 'a4' });
+                surveyDoc.addFont('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/Pretendard-Regular.ttf', 'Pretendard', 'normal');
+                surveyDoc.setFont('Pretendard', 'normal');
+                surveyDoc.setFontSize(16);
+                surveyDoc.text("사후 설문조사 결과", 105, 20, { align: 'center' });
+                surveyDoc.setFontSize(11);
+                surveyDoc.text(`- 참가자 이름: ${participantName}`, 20, 30);
+                y = 45;
+                for (let [key, value] of surveyFormData.entries()) {
+                    let text = `${key}: ${value}`;
+                    if (y > 280) { surveyDoc.addPage(); y = 20; }
+                    surveyDoc.text(text, 20, y);
+                    y += 8;
+                }
+                const surveyPdfBlob = surveyDoc.output('blob');
+                finalData.append('survey_results_pdf', surveyPdfBlob, `${participantName}_survey_results.pdf`);
+
+                // 5. 서버로 전송
+                const response = await fetch('https://ai-interview-server-cwvf.onrender.com/upload-and-email', {
+                    method: 'POST',
+                    body: finalData
+                });
+
+                const responseData = await response.json();
+                if (!response.ok) {
+                    throw new Error(responseData.message || `서버 오류: ${response.statusText}`);
+                }
+
+                console.log('서버 응답:', responseData);
+
+            } catch (error) {
+                console.error('전송 실패:', error);
+                showModal(`데이터 전송에 실패했습니다. 관리자에게 문의해주세요: ${error.message}`);
+                // 실패 시 다시 설문 화면으로 돌려보낼 수 있습니다.
+                // showScreen('surveyScreen'); 
+            } finally {
+                // 스피너를 숨기고 최종 완료 메시지를 보여줍니다.
+                document.getElementById('finalSpinner').style.display = 'none';
+                document.getElementById('finalContent').style.display = 'block';
+            }
+        }
+        
+        // --- Utility Functions ---
+        function showModal(message) {
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('modal').classList.add('active');
+        }
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+    </script></body></html>
+
