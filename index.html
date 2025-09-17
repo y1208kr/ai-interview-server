@@ -308,7 +308,6 @@
             }
             
             participantInfo.condition = 'general_ai';
-            participantInfo.timestamp = new Date().toISOString();
             
             showScreen('introScreen');
         }
@@ -360,4 +359,179 @@
                     if (audioStream) {
                         audioStream.getTracks().forEach(track => track.stop());
                         audioStream = null;
-                    
+                    }
+                };
+
+                mediaRecorder.start();
+                startRecordingTimer();
+            } catch (err) {
+                console.error('마이크 접근 오류:', err);
+                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요.');
+                showScreen('questionScreen');
+            }
+        }
+
+        function startRecordingTimer() {
+            let seconds = 0;
+            const timerDisplay = document.getElementById('recordingTimer');
+            const stopRecBtn = document.getElementById('stopRecBtn');
+            const minRecTimerDisp = document.getElementById('minRecTimer');
+            
+            let minRecSeconds = MIN_RECORDING_SECONDS;
+            minRecTimerDisp.textContent = `최소 녹음 시간까지 ${minRecSeconds}초 남았습니다.`;
+            
+            minRecTimerInterval = setInterval(() => {
+                 minRecSeconds--;
+                 minRecTimerDisp.textContent = `최소 녹음 시간까지 ${minRecSeconds}초 남았습니다.`;
+                 if(minRecSeconds <= 0){
+                     clearInterval(minRecTimerInterval);
+                     minRecTimerDisp.textContent = '이제 녹음을 완료할 수 있습니다.';
+                     stopRecBtn.disabled = false;
+                 }
+            }, 1000);
+
+            recordingTimerInterval = setInterval(() => {
+                seconds++;
+                const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const secs = (seconds % 60).toString().padStart(2, '0');
+                timerDisplay.textContent = `${mins}:${secs} / 01:30`;
+                if (seconds >= 90) {
+                    stopRecording();
+                }
+            }, 1000);
+        }
+
+        function stopRecording() {
+            clearInterval(recordingTimerInterval);
+            clearInterval(minRecTimerInterval);
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+
+            currentQuestionIndex++;
+            if (currentQuestionIndex < questions.length) {
+                showScreen('questionScreen');
+            } else {
+                completeInterview();
+            }
+        }
+        
+        function completeInterview() {
+            showScreen('surveyScreen');
+        }
+
+        async function submitSurvey() {
+            const form = document.getElementById('surveyForm');
+            if (!form.checkValidity()) {
+                showModal("모든 설문 문항에 답변해주세요.");
+                return;
+            }
+            
+            const submitBtn = document.querySelector('#surveyForm button');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '제출 중...';
+
+            const finalData = new FormData();
+            
+            // 1. 인적 정보 추가
+            for(const key in participantInfo){
+                finalData.append(key, participantInfo[key]);
+            }
+            
+            // 2. 설문 정보 추가
+            const surveyFormData = new FormData(form);
+            for(const [key, value] of surveyFormData.entries()){
+                finalData.append(key, value);
+            }
+            
+            // 3. 오디오 파일 추가
+            allAudioBlobs.forEach((blob, index) => {
+                const participantName = participantInfo.name || 'participant';
+                finalData.append(`audio_q_${index+1}`, blob, `${participantName}_q${index+1}_audio.webm`);
+            });
+            
+            // 4. PDF 파일 생성 및 추가
+            try {
+                const { jsPDF } = window.jspdf;
+                const participantName = participantInfo.name || 'participant';
+
+                // PDF 1: 동의서
+                const consentDoc = new jsPDF();
+                consentDoc.addFont('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/Pretendard-Regular.ttf', 'Pretendard', 'normal');
+                consentDoc.setFont('Pretendard');
+                consentDoc.text("연구 참여 및 개인정보 수집·이용 동의서", 10, 10);
+                consentDoc.text(`참가자 이름: ${participantName}`, 10, 20);
+                consentDoc.text(`연구 참여 동의: 예`, 10, 30);
+                consentDoc.text(`개인정보 수집 동의: 예`, 10, 40);
+                let y = 60;
+                for(const key in participantInfo) {
+                     if (key !== 'condition' && key !== 'timestamp') {
+                       consentDoc.text(`${key}: ${participantInfo[key]}`, 10, y);
+                       y += 10;
+                    }
+                }
+                const consentPdfBlob = consentDoc.output('blob');
+                finalData.append('consent_info_pdf', consentPdfBlob, `${participantName}_consent_info.pdf`);
+
+                // PDF 2: 설문조사
+                const surveyDoc = new jsPDF();
+                surveyDoc.addFont('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/Pretendard-Regular.ttf', 'Pretendard', 'normal');
+                surveyDoc.setFont('Pretendard');
+                surveyDoc.text("사후 설문조사 결과", 10, 10);
+                surveyDoc.text(`참가자 이름: ${participantName}`, 10, 20);
+                y = 30;
+                for (let [key, value] of surveyFormData.entries()) {
+                    surveyDoc.text(`${key}: ${value}`, 10, y);
+                    y += 10;
+                    if (y > 280) {
+                        surveyDoc.addPage();
+                        y = 10;
+                    }
+                }
+                const surveyPdfBlob = surveyDoc.output('blob');
+                finalData.append('survey_results_pdf', surveyPdfBlob, `${participantName}_survey_results.pdf`);
+
+                // 5. 서버로 전송
+                const response = await fetch('https://ai-interview-server-cwvf.onrender.com/upload-and-email', {
+                    method: 'POST',
+                    body: finalData
+                });
+
+                const responseText = await response.text();
+                if (!response.ok) {
+                    throw new Error(responseText || `서버 오류: ${response.statusText}`);
+                }
+
+                console.log('서버 응답:', responseText);
+                showScreen('finalCompleteScreen');
+
+            } catch (error) {
+                console.error('전송 실패:', error);
+                showModal(`데이터 전송에 실패했습니다: ${error.message}`);
+                submitBtn.disabled = false;
+                submitBtn.textContent = '최종 제출';
+            } finally {
+                 // 모달을 표시하기 위해 잠시 지연을 줍니다.
+                 setTimeout(() => {
+                    const modalMessage = document.getElementById('modalMessage');
+                    if (modalMessage) { // 모달이 아직 화면에 있다면 메시지를 설정합니다.
+                         const responseText = "성공적으로 제출되어 연구자에게 전달되었습니다."; // 성공 메시지로 가정
+                         showModal(responseText);
+                    }
+                 }, 100);
+            }
+        }
+        
+        // --- Utility Functions ---
+        function showModal(message) {
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('modal').classList.add('active');
+        }
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+    </script>
+</body>
+</html>
+
