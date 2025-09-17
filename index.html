@@ -13,6 +13,28 @@
         .container { background: rgba(255, 255, 255, 0.98); border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); max-width: 800px; width: 100%; padding: 40px; backdrop-filter: blur(10px); animation: fadeIn 0.5s ease-out; position: relative; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         
+        /* 진행률 표시 바 추가 */
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #495057, #6c757d);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+        .progress-text {
+            text-align: center;
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+        
         /* 화면 전환 스타일 */
         .screen { display: none; animation: slideIn 0.4s ease-out; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
@@ -24,19 +46,26 @@
         .btn { background: #495057; color: white; border: none; padding: 15px 40px; font-size: 1.1em; border-radius: 50px; cursor: pointer; transition: all 0.3s ease; margin: 10px; box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3); }
         .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108, 117, 125, 0.4); }
         .btn:disabled { background: #adb5bd; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-secondary { background: transparent; color: #495057; border: 2px solid #495057; }
+        .btn-secondary:hover:not(:disabled) { background: #495057; color: white; }
         .ai-message { background: #f8f9fa; border-left: 4px solid #6c757d; padding: 20px; margin: 20px 0; border-radius: 8px; line-height: 1.8; color: #495057; font-size: 1.05em; }
         
         /* 동의서 및 폼 스타일 */
-        .consent-form { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; max-height: 150px; overflow-y: auto; border: 1px solid #dee2e6; }
-        .consent-form h3 { color: #343a40; margin-bottom: 15px; }
-        .checkbox-container { margin: 15px 0; display: flex; align-items: center; gap: 10px; }
-        .checkbox-container input { width: 18px; height: 18px; cursor: pointer; }
-        .checkbox-container label { cursor: pointer; color: #495057; font-weight: 500;}
+        .consent-form { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; }
+        .consent-form h3 { color: #343a40; margin-bottom: 15px; position: sticky; top: 0; background: #f8f9fa; padding: 10px 0; }
+        .checkbox-container { margin: 15px 0; display: flex; align-items: center; gap: 10px; padding: 15px; background: #e8f4ff; border-radius: 8px; transition: all 0.3s; }
+        .checkbox-container:hover { background: #d1e7ff; }
+        .checkbox-container input { width: 20px; height: 20px; cursor: pointer; }
+        .checkbox-container label { cursor: pointer; color: #495057; font-weight: 500; flex: 1; }
         .info-form { background: #f8f9fa; padding: 25px; border-radius: 10px; margin: 20px 0; }
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
         .form-group { margin: 10px 0; }
         .form-group label { display: block; margin-bottom: 8px; color: #495057; font-weight: 500; }
-        .form-group input, .form-group select { width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 1em; }
+        .form-group label .required { color: #dc3545; }
+        .form-group input, .form-group select { width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 1em; transition: border-color 0.3s; }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: #6c757d; }
+        .form-group input:invalid:not(:placeholder-shown), .form-group select:invalid:not(:placeholder-shown) { border-color: #dc3545; }
+        .form-group .helper-text { font-size: 0.85em; color: #6c757d; margin-top: 5px; }
 
         /* 면접 진행 스타일 */
         .question-box { background: #fff; border: 1px solid #e9ecef; border-radius: 12px; padding: 25px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -45,19 +74,50 @@
         .recording-status { display: inline-block; padding: 10px 20px; background: #f8f9fa; border-radius: 25px; margin-bottom: 20px; font-weight: 500; }
         .recording-status.active { background: #ff4757; color: white; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 71, 87, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0); } }
-        .timer { font-size: 2em; color: #495057; margin: 20px 0; font-weight: bold; text-align: center; font-variant-numeric: tabular-nums; }
+        .timer { font-size: 2.5em; color: #495057; margin: 20px 0; font-weight: bold; text-align: center; font-variant-numeric: tabular-nums; }
+        .timer.warning { color: #dc3545; animation: blink 1s infinite; }
+        @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.5; } }
         .min-rec-timer { text-align: center; color: #dc3545; font-weight: 500; margin-top: 10px;}
+        
+        /* 음성 레벨 표시기 추가 */
+        .audio-level {
+            margin: 20px auto;
+            width: 200px;
+            height: 30px;
+            background: #e9ecef;
+            border-radius: 15px;
+            overflow: hidden;
+            display: none;
+        }
+        .audio-level.active { display: block; }
+        .audio-level-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #ffc107, #dc3545);
+            width: 0%;
+            transition: width 0.1s ease;
+            border-radius: 15px;
+        }
 
         /* 설문조사 스타일 */
         .survey-form-container { max-height: 50vh; overflow-y: auto; padding: 5px 15px 5px 5px; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 20px;}
         .survey-group { margin-bottom: 30px; }
         .survey-group h3 { color: #343a40; margin-bottom: 20px; border-bottom: 2px solid #e9ecef; padding-bottom: 10px; font-size: 1.2em; }
-        .survey-item { margin-bottom: 25px; }
+        .survey-item { margin-bottom: 25px; padding: 15px; background: #fff; border-radius: 8px; transition: all 0.3s; }
+        .survey-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .survey-item p { margin-bottom: 15px; color: #212529; font-weight: 500; font-size: 1.05em;}
         .likert-scale { display: flex; justify-content: space-between; align-items: center; list-style: none; padding: 0; max-width: 500px; margin: 10px auto 0; }
         .likert-scale li { display: flex; flex-direction: column; align-items: center; flex: 1; }
-        .likert-scale input[type="radio"] { margin-bottom: 5px; width: 18px; height: 18px; cursor: pointer; }
-        .likert-scale label { font-size: 0.85em; color: #6c757d; text-align: center; }
+        .likert-scale input[type="radio"] { margin-bottom: 5px; width: 20px; height: 20px; cursor: pointer; }
+        .likert-scale input[type="radio"]:hover { transform: scale(1.2); }
+        .likert-scale label { font-size: 0.85em; color: #6c757d; text-align: center; cursor: pointer; }
+        
+        /* 설문 진행 상황 표시 */
+        .survey-progress {
+            text-align: right;
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
 
         /* 모달 스타일 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 1000; animation: fadeInModal 0.3s; }
@@ -65,6 +125,58 @@
         .modal-content { background: white; padding: 30px; border-radius: 15px; text-align: center; max-width: 400px; width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         .modal-content p { margin-bottom: 20px; font-size: 1.1em; color: #495057; line-height: 1.6; }
         .modal-overlay.active { display: flex; }
+        
+        /* 로딩 스피너 */
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #495057;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 툴팁 스타일 */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: #495057;
+            color: #fff;
+            text-align: center;
+            padding: 8px;
+            border-radius: 6px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.85em;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* 반응형 디자인 개선 */
+        @media (max-width: 768px) {
+            .container { padding: 20px; }
+            h1 { font-size: 1.5em; }
+            .btn { padding: 12px 30px; font-size: 1em; }
+            .timer { font-size: 2em; }
+            .form-grid { grid-template-columns: 1fr; }
+        }
 
     </style>
 </head>
@@ -89,6 +201,9 @@
             "팀의 일원으로서 효과적으로 협업했던 경험에 대해 말씀해 주십시오."
         ];
         
+        const totalSteps = 7; // 전체 단계 수
+        let currentStep = 0;
+        
         // --- Global State ---
         let participantInfo = {};
         let allAudioBlobs = [];
@@ -96,22 +211,61 @@
         let mediaRecorder;
         let audioStream = null;
         let prepTimerInterval, recordingTimerInterval, minRecTimerInterval;
+        let audioContext, analyser;
         const MIN_RECORDING_SECONDS = 20;
 
         // --- Core Application Logic ---
         document.addEventListener('DOMContentLoaded', () => {
             showScreen('startScreen');
+            // 뒤로가기 방지
+            window.addEventListener('popstate', function(e) {
+                e.preventDefault();
+                showModal('브라우저 뒤로가기는 사용할 수 없습니다. 실험을 계속 진행해주세요.');
+                history.pushState(null, null, location.href);
+            });
+            history.pushState(null, null, location.href);
         });
+
+        function updateProgress() {
+            const progressFill = document.querySelector('.progress-fill');
+            const progressText = document.querySelector('.progress-text');
+            if (progressFill && progressText) {
+                const percentage = Math.round((currentStep / totalSteps) * 100);
+                progressFill.style.width = `${percentage}%`;
+                progressText.textContent = `진행률: ${currentStep}/${totalSteps} 단계`;
+            }
+        }
 
         function showScreen(screenId) {
             const container = document.getElementById('container');
-            container.innerHTML = getScreenHTML(screenId);
+            
+            // 진행률 업데이트
+            switch(screenId) {
+                case 'startScreen': currentStep = 1; break;
+                case 'infoScreen': currentStep = 2; break;
+                case 'introScreen': currentStep = 3; break;
+                case 'questionScreen': currentStep = 3 + currentQuestionIndex + 1; break;
+                case 'surveyScreen': currentStep = 7; break;
+            }
+            
+            // 진행률 바 HTML
+            const progressHTML = screenId !== 'finalCompleteScreen' ? `
+                <div class="progress-text"></div>
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+            ` : '';
+            
+            container.innerHTML = progressHTML + getScreenHTML(screenId);
+            updateProgress();
             
             if (screenId === 'startScreen') {
                 document.getElementById('consentCheck1').addEventListener('change', checkAllConsents);
                 document.getElementById('consentCheck2').addEventListener('change', checkAllConsents);
             } else if (screenId === 'questionScreen') {
                 startPrepTimer();
+            } else if (screenId === 'surveyScreen') {
+                updateSurveyProgress();
             }
         }
         
@@ -121,17 +275,21 @@
                     return `
                         <h1>AI 면접 실험 참여 안내</h1>
                         <div class="consent-form">
-                            <h3>연구 참여 동의서</h3>
+                            <h3>📋 연구 참여 동의서</h3>
                             <p>안녕하세요. 본 연구는 "AI 면접의 상호작용 공정성이 조직 매력도에 미치는 영향"을 주제로 하는 실험 연구입니다. (연구책임자: ${researcherName})</p>
                             <p>잠시 시간을 내어 연구에 참여해주시면, AI 채용 시스템의 발전에 기여하는 소중한 데이터로 활용될 것입니다. 참여 과정에서 경험하시는 모든 내용은 익명으로 처리되오니 편안한 마음으로 임해주십시오.</p>
-                            <p style="font-weight: bold; color: #007bff;">설문 문항이나 녹음 등 조사를 성실히 수행해주셨다고 판단되면, 감사의 의미로 소정의 사례비(3만원)를 드립니다.</p>
+                            <p style="font-weight: bold; color: #007bff;">💰 설문 문항이나 녹음 등 조사를 성실히 수행해주셨다고 판단되면, 감사의 의미로 소정의 사례비(3만원)를 드립니다.</p>
+                            <p style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 5px;">
+                                <strong>⏱️ 예상 소요 시간:</strong> 약 15-20분<br>
+                                <strong>🎤 준비 사항:</strong> 마이크가 연결된 조용한 환경
+                            </p>
                         </div>
                          <div class="checkbox-container">
                             <input type="checkbox" id="consentCheck1">
                             <label for="consentCheck1">위 내용을 모두 확인했으며, 연구 참여에 동의합니다.</label>
                         </div>
                         <div class="consent-form">
-                            <h3>개인정보 수집·이용 동의서</h3>
+                            <h3>🔐 개인정보 수집·이용 동의서</h3>
                             <p><strong>1. 수집·이용 목적:</strong> 학술 연구 목적의 통계 분석 및 사례비 지급</p>
                             <p><strong>2. 수집 항목:</strong> [필수] 이름, 성별, 연령대, 직업상태, 전공계열, AI면접경험, AI기술 인식, 음성녹음파일, 전화번호, 은행명, 계좌번호</p>
                             <p><strong>3. 보유 및 이용 기간:</strong> 연구 종료 후 3년 (이후 즉시 파기)</p>
@@ -142,7 +300,7 @@
                             <label for="consentCheck2">위 개인정보 수집·이용에 동의합니다.</label>
                         </div>
                         <div style="text-align: center;">
-                            <button class="btn" onclick="requestMicPermission()" id="startBtn" disabled>다음</button>
+                            <button class="btn" onclick="requestMicPermission()" id="startBtn" disabled>다음 단계로</button>
                         </div>
                     `;
                 case 'infoScreen':
@@ -151,27 +309,92 @@
                         <div class="info-form">
                             <form id="participantForm">
                                 <div class="form-grid">
-                                    <div class="form-group"><label for="name">이름</label><input type="text" id="name" name="name" required></div>
-                                    <div class="form-group"><label for="gender">성별</label><select id="gender" name="gender" required><option value="">선택</option><option value="male">남성</option><option value="female">여성</option></select></div>
-                                    <div class="form-group"><label for="ageGroup">연령대</label><select id="ageGroup" name="ageGroup" required><option value="">선택</option><option value="20s">20대</option><option value="30s">30대</option><option value="40s">40대</option><option value="50s_over">50대 이상</option></select></div>
-                                    <div class="form-group"><label for="jobStatus">현재 직업 상태</label><select id="jobStatus" name="jobStatus" required><option value="">선택</option><option value="student_undergrad">대학생</option><option value="student_grad">대학원생</option><option value="job_seeker">취업준비생</option><option value="employee">직장인</option><option value="entrepreneur">개인 사업자</option></select></div>
-                                    <div class="form-group"><label for="major">전공 계열</label><select id="major" name="major" required><option value="">선택</option><option value="humanities">인문/사회</option><option value="natural_science">자연/공학</option><option value="arts_sports">예체능</option><option value="etc">기타</option></select></div>
-                                    <div class="form-group"><label for="aiExperience">AI 면접 경험</label><select id="aiExperience" name="aiExperience" required><option value="">선택</option><option value="yes">있음</option><option value="no">없음</option></select></div>
-                                    <div class="form-group"><label for="phone">전화번호</label><input type="tel" id="phone" name="phone" required placeholder="010-1234-5678"></div>
-                                    <div class="form-group"><label for="bankName">은행명</label><input type="text" id="bankName" name="bankName" required></div>
-                                    <div class="form-group"><label for="accountNumber">계좌번호</label><input type="text" id="accountNumber" name="accountNumber" required></div>
+                                    <div class="form-group">
+                                        <label for="name">이름 <span class="required">*</span></label>
+                                        <input type="text" id="name" name="name" required placeholder="실명 입력">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="gender">성별 <span class="required">*</span></label>
+                                        <select id="gender" name="gender" required>
+                                            <option value="">선택하세요</option>
+                                            <option value="male">남성</option>
+                                            <option value="female">여성</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="ageGroup">연령대 <span class="required">*</span></label>
+                                        <select id="ageGroup" name="ageGroup" required>
+                                            <option value="">선택하세요</option>
+                                            <option value="20s">20대</option>
+                                            <option value="30s">30대</option>
+                                            <option value="40s">40대</option>
+                                            <option value="50s_over">50대 이상</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="jobStatus">현재 직업 상태 <span class="required">*</span></label>
+                                        <select id="jobStatus" name="jobStatus" required>
+                                            <option value="">선택하세요</option>
+                                            <option value="student_undergrad">대학생</option>
+                                            <option value="student_grad">대학원생</option>
+                                            <option value="job_seeker">취업준비생</option>
+                                            <option value="employee">직장인</option>
+                                            <option value="entrepreneur">개인 사업자</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="major">전공 계열 <span class="required">*</span></label>
+                                        <select id="major" name="major" required>
+                                            <option value="">선택하세요</option>
+                                            <option value="humanities">인문/사회</option>
+                                            <option value="natural_science">자연/공학</option>
+                                            <option value="arts_sports">예체능</option>
+                                            <option value="etc">기타</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="aiExperience">AI 면접 경험 <span class="required">*</span></label>
+                                        <select id="aiExperience" name="aiExperience" required>
+                                            <option value="">선택하세요</option>
+                                            <option value="yes">있음</option>
+                                            <option value="no">없음</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="phone">전화번호 <span class="required">*</span>
+                                            <span class="tooltip"> ℹ️
+                                                <span class="tooltiptext">사례비 지급 확인용입니다</span>
+                                            </span>
+                                        </label>
+                                        <input type="tel" id="phone" name="phone" required placeholder="010-1234-5678" 
+                                               pattern="[0-9]{3}-[0-9]{4}-[0-9]{4}">
+                                        <span class="helper-text">형식: 010-1234-5678</span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="bankName">은행명 <span class="required">*</span></label>
+                                        <input type="text" id="bankName" name="bankName" required placeholder="예: 국민은행">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="accountNumber">계좌번호 <span class="required">*</span></label>
+                                        <input type="text" id="accountNumber" name="accountNumber" required 
+                                               placeholder="'-' 포함하여 입력">
+                                    </div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="aiAttitude">평소 AI 기술에 대한 인식</label>
+                                    <label for="aiAttitude">평소 AI 기술에 대한 인식 <span class="required">*</span></label>
                                     <select id="aiAttitude" name="aiAttitude" required>
                                         <option value="">선택하세요</option>
-                                        <option value="1">1 (매우 부정적)</option><option value="2">2</option><option value="3">3</option>
-                                        <option value="4">4 (보통)</option><option value="5">5</option><option value="6">6</option>
+                                        <option value="1">1 (매우 부정적)</option>
+                                        <option value="2">2 (부정적)</option>
+                                        <option value="3">3 (약간 부정적)</option>
+                                        <option value="4">4 (보통)</option>
+                                        <option value="5">5 (약간 긍정적)</option>
+                                        <option value="6">6 (긍정적)</option>
                                         <option value="7">7 (매우 긍정적)</option>
                                     </select>
                                 </div>
-                                <div style="text-align: center; margin-top:20px;">
-                                   <button type="button" class="btn" onclick="startInterview()">면접 시작</button>
+                                <div style="text-align: center; margin-top:30px;">
+                                    <button type="button" class="btn" onclick="startInterview()">면접 시작하기</button>
                                 </div>
                             </form>
                         </div>
@@ -179,359 +402,42 @@
                  case 'introScreen':
                     return `
                         <h1>AI 면접 안내</h1>
-                        <div class="ai-message">면접을 시작하겠습니다.</div>
+                        <div class="ai-message">
+                            <h3 style="margin-bottom: 15px;">🤖 면접 진행 방식</h3>
+                            <ul style="list-style: none; padding: 0;">
+                                <li style="margin: 10px 0;">📝 총 3개의 질문이 제시됩니다</li>
+                                <li style="margin: 10px 0;">⏱️ 각 질문마다 1분의 준비 시간이 주어집니다</li>
+                                <li style="margin: 10px 0;">🎤 최소 20초 ~ 최대 1분 30초 동안 답변을 녹음합니다</li>
+                                <li style="margin: 10px 0;">✅ 모든 답변 후 간단한 설문이 있습니다</li>
+                            </ul>
+                            <p style="margin-top: 20px; font-weight: bold;">준비되셨나요? 그럼 시작하겠습니다.</p>
+                        </div>
                         <div style="text-align: center;">
-                            <button class="btn" onclick="startFirstQuestion()">시작</button>
+                            <button class="btn" onclick="startFirstQuestion()">면접 시작</button>
                         </div>
                     `;
                  case 'questionScreen':
-                    const q_intro = currentQuestionIndex === 0 ? "1번 질문입니다." : (currentQuestionIndex === 1 ? "다음 질문입니다." : "마지막 질문입니다.");
+                    const q_intro = currentQuestionIndex === 0 ? "첫 번째 질문입니다." : 
+                                   (currentQuestionIndex === 1 ? "두 번째 질문입니다." : "마지막 질문입니다.");
                     return `
-                        <h1>면접 질문</h1>
+                        <h1>면접 질문 ${currentQuestionIndex + 1}/3</h1>
                         <div class="ai-message">${q_intro}</div>
                         <div class="question-box">
                             <div class="question-number">질문 ${currentQuestionIndex + 1}</div>
-                            <p>${questions[currentQuestionIndex]}</p>
+                            <p style="font-size: 1.2em; line-height: 1.8;">${questions[currentQuestionIndex]}</p>
                         </div>
                         <div class="prep-timer" id="prepTimer">
-                            <h3>답변 준비 시간</h3>
+                            <h3>⏳ 답변 준비 시간</h3>
                             <div class="timer" id="prepTimerDisplay">01:00</div>
+                            <p style="margin-top: 10px; font-size: 0.9em;">준비 시간 동안 답변을 구상해주세요</p>
                         </div>
                         <div style="text-align: center;">
-                            <button class="btn" onclick="startRecording()" id="recordBtn" disabled>답변 녹음 시작</button>
+                            <button class="btn" onclick="startRecording()" id="recordBtn" disabled>
+                                답변 녹음 시작
+                            </button>
+                            <button class="btn btn-secondary" onclick="skipPrep()" id="skipBtn">
+                                준비됐어요 (준비 시간 건너뛰기)
+                            </button>
                         </div>
                     `;
-                case 'recordingScreen':
-                    return `
-                        <h1>답변 녹음 중</h1>
-                        <div class="question-box">
-                           <div class="question-number">질문 ${currentQuestionIndex + 1}</div>
-                           <p>${questions[currentQuestionIndex]}</p>
-                        </div>
-                        <div style="text-align: center; margin-top: 20px;">
-                           <div class="recording-status active">🔴 녹음 중</div>
-                           <div class="timer" id="recordingTimer">00:00 / 01:30</div>
-                           <div class="min-rec-timer" id="minRecTimer"></div>
-                        </div>
-                        <div style="text-align: center;">
-                           <button class="btn" id="stopRecBtn" onclick="stopRecording()" disabled>녹음 완료</button>
-                        </div>
-                    `;
-                case 'surveyScreen':
-                    return `
-                        <h1>사후 설문조사</h1>
-                        <p class="ai-message">면접 경험을 바탕으로, 아래 각 문항에 대해 귀하의 생각과 가장 가까운 번호에 체크해주세요.</p>
-                        <div class="survey-form-container">
-                            <form id="surveyForm">
-                                <div class="survey-group">
-                                    <h3>면접관(시스템)과의 상호작용</h3>
-                                    ${generateSurveyItems('ij', ['면접관(시스템)은 저를 존중하는 태도로 대했습니다.', '면접관(시스템)은 저에게 예의를 갖추어 대했습니다.', '면접관(시스템)은 저에게 부적절하거나 무례한 발언을 하지 않았습니다.', '면접관(시스템)은 저를 대할 때 개인적인 편견 없이 대했습니다.', '면접관(시스템)은 면접 절차에 대해 솔직하게 설명해 주었습니다.', '면접관(시스템)은 면접 절차에 대한 설명을 시의적절하게 제공했습니다.', '면접관(시스템)이 제공한 설명은 합리적으로 이해가 되었습니다.', '면접관(시스템)은 제가 궁금해할 만한 사항에 대해 충분한 정보를 제공했습니다.', '면접관(시스템)은 평가가 이루어지는 방식에 대해 명확하게 설명해 주었습니다.'])}
-                                </div>
-                                <div class="survey-group">
-                                    <h3>면접 절차 및 과정</h3>
-                                    ${generateSurveyItems('pj', ['면접 과정에서 제 견해나 의견을 표현할 기회를 가졌습니다.', '면접 절차는 모든 지원자에게 일관성 있게 적용되었을 것이라고 생각합니다.', '면접 절차는 개인적인 편견 없이 중립적으로 진행되었다고 생각합니다.', '면접 평가는 정확한 정보에 근거하여 이루어졌을 것이라고 생각합니다.', '만약 잘못된 평가가 내려졌을 경우, 이를 수정할 수 있는 공식적인 절차가 마련되어 있었을 것입니다.', '면접 절차는 채용 과정 전반의 가치와 윤리를 대표한다고 생각합니다.', '면접 절차는 일반적인 윤리 및 도덕 기준에 부합했습니다.'])}
-                                </div>
-                                <div class="survey-group">
-                                    <h3>면접 경험 후 기업에 대한 생각</h3>
-                                    ${generateSurveyItems('oa', ['이 회사는 일하기에 매력적인 곳이라고 생각합니다.', '이 회사에 대해 긍정적인 인상을 갖게 되었습니다.', '전반적으로, 이 회사를 높이 평가합니다.'])}
-                                </div>
-                                 <div style="text-align: center;">
-                                    <button type="button" class="btn" onclick="submitSurvey()">최종 제출</button>
-                                </div>
-                            </form>
-                        </div>
-                    `;
-                case 'finalCompleteScreen':
-                    return `
-                        <div style="text-align: center; padding: 40px;">
-                            <h1 style="font-size: 2.5em; margin-bottom: 20px; background: none;">✅</h1>
-                            <h2>모든 실험이 완료되었습니다</h2>
-                            <p class="ai-message" style="margin-top: 20px; border-left-color: #28a745;">연구에 참여해주셔서 진심으로 감사합니다. 귀하의 소중한 데이터는 학술 발전에 큰 도움이 될 것입니다.</p>
-                        </div>
-                    `;
-            }
-        }
-        
-        function generateSurveyItems(prefix, items) {
-            let html = '';
-            items.forEach((item, index) => {
-                const name = `${prefix}${index + 1}`;
-                html += `
-                    <div class="survey-item">
-                        <p>${index + 1}. ${item}</p>
-                        <ul class="likert-scale">
-                            <li><label for="${name}_1">전혀<br>아니다</label><input type="radio" id="${name}_1" name="${name}" value="1" required></li>
-                            <li><label for="${name}_2">2</label><input type="radio" id="${name}_2" name="${name}" value="2"></li>
-                            <li><label for="${name}_3">3</label><input type="radio" id="${name}_3" name="${name}" value="3"></li>
-                            <li><label for="${name}_4">보통</label><input type="radio" id="${name}_4" name="${name}" value="4"></li>
-                            <li><label for="${name}_5">5</label><input type="radio" id="${name}_5" name="${name}" value="5"></li>
-                            <li><label for="${name}_6">6</label><input type="radio" id="${name}_6" name="${name}" value="6"></li>
-                            <li><label for="${name}_7">매우<br>그렇다</label><input type="radio" id="${name}_7" name="${name}" value="7"></li>
-                        </ul>
-                    </div>
-                `;
-            });
-            return html;
-        }
-
-        // --- Event Handlers & Logic ---
-        function checkAllConsents() {
-            const consent1 = document.getElementById('consentCheck1').checked;
-            const consent2 = document.getElementById('consentCheck2').checked;
-            document.getElementById('startBtn').disabled = !(consent1 && consent2);
-        }
-
-        async function requestMicPermission() {
-            try {
-                audioStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: true, noiseSuppression: true } 
-                });
-                audioStream.getTracks().forEach(track => track.stop());
-                audioStream = null;
-                showScreen('infoScreen');
-            } catch (err) {
-                console.error('마이크 접근 오류:', err);
-                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요. 권한 설정 후 페이지를 새로고침해야 할 수 있습니다.');
-            }
-        }
-
-        function startInterview() {
-            const form = document.getElementById('participantForm');
-            if (!form.checkValidity()) {
-                showModal('모든 인적 정보를 입력해주세요.');
-                return;
-            }
-            
-            const formData = new FormData(form);
-            for (let [key, value] of formData.entries()) {
-                participantInfo[key] = value;
-            }
-            
-            participantInfo.condition = 'general_ai';
-            
-            showScreen('introScreen');
-        }
-
-        function startFirstQuestion() { showScreen('questionScreen'); }
-        
-        function startPrepTimer() {
-            let seconds = 60;
-            const timerDisplay = document.getElementById('prepTimerDisplay');
-            const recordBtn = document.getElementById('recordBtn');
-            
-            prepTimerInterval = setInterval(() => {
-                seconds--;
-                const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
-                const secs = (seconds % 60).toString().padStart(2, '0');
-                timerDisplay.textContent = `${minutes}:${secs}`;
-                
-                if (seconds <= 0) {
-                    clearInterval(prepTimerInterval);
-                    recordBtn.disabled = false;
-                    document.getElementById('prepTimer').innerHTML = '<h3 style="color: #28a745;">준비 시간이 종료되었습니다. 녹음 버튼을 눌러 답변을 시작하세요.</h3>';
-                }
-            }, 1000);
-        }
-
-        async function startRecording() {
-            clearInterval(prepTimerInterval);
-            const recordBtn = document.getElementById('recordBtn');
-            recordBtn.disabled = true;
-            recordBtn.textContent = "잠시만 기다려주세요...";
-
-            try {
-                audioStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: true, noiseSuppression: true } 
-                });
-                
-                showScreen('recordingScreen');
-                let audioChunks = [];
-                
-                mediaRecorder = new MediaRecorder(audioStream);
-
-                mediaRecorder.ondataavailable = event => {
-                    if (event.data.size > 0) audioChunks.push(event.data);
-                };
-
-                mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    allAudioBlobs.push(audioBlob);
-                    if (audioStream) {
-                        audioStream.getTracks().forEach(track => track.stop());
-                        audioStream = null;
-                    }
-                };
-
-                mediaRecorder.start();
-                startRecordingTimer();
-            } catch (err) {
-                console.error('마이크 접근 오류:', err);
-                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요.');
-                showScreen('questionScreen');
-            }
-        }
-
-        function startRecordingTimer() {
-            let seconds = 0;
-            const timerDisplay = document.getElementById('recordingTimer');
-            const stopRecBtn = document.getElementById('stopRecBtn');
-            const minRecTimerDisp = document.getElementById('minRecTimer');
-            
-            let minRecSeconds = MIN_RECORDING_SECONDS;
-            minRecTimerDisp.textContent = `최소 녹음 시간까지 ${minRecSeconds}초 남았습니다.`;
-            
-            minRecTimerInterval = setInterval(() => {
-                 minRecSeconds--;
-                 minRecTimerDisp.textContent = `최소 녹음 시간까지 ${minRecSeconds}초 남았습니다.`;
-                 if(minRecSeconds <= 0){
-                     clearInterval(minRecTimerInterval);
-                     minRecTimerDisp.textContent = '이제 녹음을 완료할 수 있습니다.';
-                     stopRecBtn.disabled = false;
-                 }
-            }, 1000);
-
-            recordingTimerInterval = setInterval(() => {
-                seconds++;
-                const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-                const secs = (seconds % 60).toString().padStart(2, '0');
-                timerDisplay.textContent = `${mins}:${secs} / 01:30`;
-                if (seconds >= 90) {
-                    stopRecording();
-                }
-            }, 1000);
-        }
-
-        function stopRecording() {
-            clearInterval(recordingTimerInterval);
-            clearInterval(minRecTimerInterval);
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
-            }
-
-            currentQuestionIndex++;
-            if (currentQuestionIndex < questions.length) {
-                showScreen('questionScreen');
-            } else {
-                completeInterview();
-            }
-        }
-        
-        function completeInterview() {
-            showScreen('surveyScreen');
-        }
-
-        async function submitSurvey() {
-            const form = document.getElementById('surveyForm');
-            if (!form.checkValidity()) {
-                showModal("모든 설문 문항에 답변해주세요.");
-                return;
-            }
-            
-            const submitBtn = document.querySelector('#surveyForm button');
-            submitBtn.disabled = true;
-            submitBtn.textContent = '제출 중...';
-
-            const finalData = new FormData();
-            
-            // 1. 인적 정보 추가
-            for(const key in participantInfo){
-                finalData.append(key, participantInfo[key]);
-            }
-            
-            // 2. 설문 정보 추가
-            const surveyFormData = new FormData(form);
-            for(const [key, value] of surveyFormData.entries()){
-                finalData.append(key, value);
-            }
-            
-            // 3. 오디오 파일 추가
-            allAudioBlobs.forEach((blob, index) => {
-                const participantName = participantInfo.name || 'participant';
-                finalData.append(`audio_q_${index+1}`, blob, `${participantName}_q${index+1}_audio.webm`);
-            });
-            
-            // 4. PDF 파일 생성 및 추가
-            try {
-                const { jsPDF } = window.jspdf;
-                const participantName = participantInfo.name || 'participant';
-
-                // PDF 1: 동의서
-                const consentDoc = new jsPDF();
-                consentDoc.addFont('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/Pretendard-Regular.ttf', 'Pretendard', 'normal');
-                consentDoc.setFont('Pretendard');
-                consentDoc.text("연구 참여 및 개인정보 수집·이용 동의서", 10, 10);
-                consentDoc.text(`참가자 이름: ${participantName}`, 10, 20);
-                consentDoc.text(`연구 참여 동의: 예`, 10, 30);
-                consentDoc.text(`개인정보 수집 동의: 예`, 10, 40);
-                let y = 60;
-                for(const key in participantInfo) {
-                     if (key !== 'condition' && key !== 'timestamp') {
-                       consentDoc.text(`${key}: ${participantInfo[key]}`, 10, y);
-                       y += 10;
-                    }
-                }
-                const consentPdfBlob = consentDoc.output('blob');
-                finalData.append('consent_info_pdf', consentPdfBlob, `${participantName}_consent_info.pdf`);
-
-                // PDF 2: 설문조사
-                const surveyDoc = new jsPDF();
-                surveyDoc.addFont('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/Pretendard-Regular.ttf', 'Pretendard', 'normal');
-                surveyDoc.setFont('Pretendard');
-                surveyDoc.text("사후 설문조사 결과", 10, 10);
-                surveyDoc.text(`참가자 이름: ${participantName}`, 10, 20);
-                y = 30;
-                for (let [key, value] of surveyFormData.entries()) {
-                    surveyDoc.text(`${key}: ${value}`, 10, y);
-                    y += 10;
-                    if (y > 280) {
-                        surveyDoc.addPage();
-                        y = 10;
-                    }
-                }
-                const surveyPdfBlob = surveyDoc.output('blob');
-                finalData.append('survey_results_pdf', surveyPdfBlob, `${participantName}_survey_results.pdf`);
-
-                // 5. 서버로 전송
-                const response = await fetch('https://ai-interview-server-cwvf.onrender.com/upload-and-email', {
-                    method: 'POST',
-                    body: finalData
-                });
-
-                const responseText = await response.text();
-                if (!response.ok) {
-                    throw new Error(responseText || `서버 오류: ${response.statusText}`);
-                }
-
-                console.log('서버 응답:', responseText);
-                showScreen('finalCompleteScreen');
-
-            } catch (error) {
-                console.error('전송 실패:', error);
-                showModal(`데이터 전송에 실패했습니다: ${error.message}`);
-                submitBtn.disabled = false;
-                submitBtn.textContent = '최종 제출';
-            } finally {
-                 // 모달을 표시하기 위해 잠시 지연을 줍니다.
-                 setTimeout(() => {
-                    const modalMessage = document.getElementById('modalMessage');
-                    if (modalMessage) { // 모달이 아직 화면에 있다면 메시지를 설정합니다.
-                         const responseText = "성공적으로 제출되어 연구자에게 전달되었습니다."; // 성공 메시지로 가정
-                         showModal(responseText);
-                    }
-                 }, 100);
-            }
-        }
-        
-        // --- Utility Functions ---
-        function showModal(message) {
-            document.getElementById('modalMessage').textContent = message;
-            document.getElementById('modal').classList.add('active');
-        }
-        function closeModal() {
-            document.getElementById('modal').classList.remove('active');
-        }
-
-    </script>
-</body>
-</html>
-
+                case 'recording
