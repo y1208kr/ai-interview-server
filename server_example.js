@@ -1,6 +1,6 @@
 /*
- * [V9 FINAL-URL-SHORTENER] Firebase Storage에서 생성된 긴 URL을
- * Bitly API를 통해 짧은 URL로 변환하여 저장하는 기능이 추가된 최종 버전입니다.
+ * [V10 FINAL-STABILITY-UPDATE] Bitly URL 단축 기능을 제거하여 서버 안정성을 확보하고,
+ * 데이터 구조 처리 방식을 개선하여 데이터 밀림 및 인코딩 오류를 해결한 최종 버전입니다.
  */
 const express = require('express');
 const multer = require('multer');
@@ -8,14 +8,13 @@ const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 const admin = require('firebase-admin');
-const axios = require('axios'); // Bitly API 요청을 위한 라이브러리
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // --- 시작 전 필수 환경 변수 확인 ---
 console.log('[System] 서버 시작 프로세스 개시...');
-const requiredEnvVars = ['FIREBASE_SERVICE_ACCOUNT_KEY_JSON', 'FIREBASE_STORAGE_BUCKET', 'BITLY_ACCESS_TOKEN'];
+const requiredEnvVars = ['FIREBASE_SERVICE_ACCOUNT_KEY_JSON', 'FIREBASE_STORAGE_BUCKET'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
@@ -62,45 +61,14 @@ function fixEncoding(brokenString) {
     }
 }
 
-/**
- * Bitly API를 사용하여 긴 URL을 짧게 만듭니다.
- * @param {string} longUrl - 단축할 긴 URL
- * @returns {Promise<string>} 단축된 URL 또는 실패 시 원본 URL
- */
-async function shortenUrl(longUrl) {
-    const endpoint = 'https://api-ssl.bitly.com/v4/shorten';
-    const accessToken = process.env.BITLY_ACCESS_TOKEN;
-
-    try {
-        console.log(`[Bitly] URL 단축 시도: ${longUrl.substring(0, 50)}...`);
-        const response = await axios.post(
-            endpoint,
-            { long_url: longUrl },
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-        const shortUrl = response.data.link;
-        console.log(`[Bitly] URL 단축 성공: ${shortUrl}`);
-        return shortUrl;
-    } catch (error) {
-        console.error('[Bitly] URL 단축 실패:', error.response ? error.response.data : error.message);
-        return longUrl; // 단축에 실패하면 긴 원본 URL을 그대로 반환합니다.
-    }
-}
-
-
 // --- 서버 메인 로직 ---
 app.post('/upload-and-email', upload.any(), async (req, res) => {
     console.log("\n///////////////////////////////////////////////////////////");
     console.log("[Request] 새로운 면접 결과 요청을 받았습니다.");
 
     const files = req.files;
-    const participantInfo = JSON.parse(fixEncoding(req.body.participantInfo));
-    const participantName = participantInfo.name || 'UnknownParticipant';
+    const participantInfoRaw = JSON.parse(fixEncoding(req.body.participantInfo));
+    const participantName = participantInfoRaw.name || 'UnknownParticipant';
     const timestamp = new Date().toISOString();
     const docId = `${timestamp}_${participantName}`;
     console.log(`[Request] 참가자 이름: ${participantName} (인코딩 복원 완료)`);
@@ -108,7 +76,7 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
     const fileLinks = {};
     let isSuccess = true;
 
-    // --- STEP 1: Firebase Storage 파일 업로드 및 URL 단축 ---
+    // --- STEP 1: Firebase Storage 파일 업로드 ---
     try {
         console.log("\n--- STEP 1: Firebase Storage 파일 업로드 시작 ---");
         for (const file of files) {
@@ -122,13 +90,10 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
             });
             
             const uploadedFile = bucket.file(destination);
-            const [longUrl] = await uploadedFile.getSignedUrl({
+            const [url] = await uploadedFile.getSignedUrl({
                 action: 'read',
                 expires: '03-09-2491'
             });
-
-            // ** [NEW] URL 단축 기능 호출 **
-            const shortUrl = await shortenUrl(longUrl);
 
             console.log(`[Storage] '${originalFilename}' 업로드 및 링크 생성 성공.`);
             
@@ -138,7 +103,7 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
                 key = `Audio_${qNum.toUpperCase()}`;
             } else if (file.fieldname.includes('consent')) key = 'PDF_Consent';
             else if (file.fieldname.includes('survey')) key = 'PDF_Survey';
-            if (key) fileLinks[key] = shortUrl; // Firestore에는 짧은 URL을 저장합니다.
+            if (key) fileLinks[key] = url;
         }
         console.log("--- STEP 1: Firebase Storage 파일 업로드 완료 ---\n");
     } catch (error) {
@@ -146,17 +111,21 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
         isSuccess = false;
     }
 
-    // --- STEP 2: Firestore 데이터 추가 ---
+    // --- STEP 2: Firestore 데이터 추가 (데이터 구조 개선) ---
     if (isSuccess) {
         try {
             console.log("--- STEP 2: Firestore 데이터 추가 시작 ---");
-            const combinedData = { ...participantInfo, ...participantInfo.surveyData };
+
+            // [FIX] 데이터 밀림 및 깨짐 현상 해결을 위한 안정적인 구조
+            const surveyData = participantInfoRaw.surveyData || {};
+            delete participantInfoRaw.surveyData; // 원본에서 surveyData 객체 제거
+
             const newRow = { 
-                ...combinedData, 
-                ...fileLinks,
+                ...participantInfoRaw, // 순수 인적 정보
+                ...surveyData,         // 설문 데이터
+                ...fileLinks,          // 파일 링크
                 timestamp: admin.firestore.FieldValue.serverTimestamp()
             };
-            delete newRow.surveyData;
             
             await db.collection('interviewResults').doc(docId).set(newRow);
             console.log(`[Firestore] Document ID '${docId}' 로 데이터 추가 성공.`);
