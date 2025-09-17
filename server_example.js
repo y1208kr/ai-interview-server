@@ -33,8 +33,16 @@ console.log('[System] 모든 환경 변수가 설정된 것을 확인했습니�
 // --- Google API 설정 ---
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-const GOOGLE_PRIVATE_KEY = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+const GOOGLE_PRIVATE_KEY = (process.env.GOOGLE_PRIVATE_KEY || '')
+  .replace(/\\n/g, '\n')
+  .trim();
+// Private Key 유효성 간단 체크
+if (!GOOGLE_PRIVATE_KEY.includes('BEGIN PRIVATE KEY')) {
+  console.error('[FATAL ERROR] GOOGLE_PRIVATE_KEY 형식이 올바르지 않습니다.');
+  process.exit(1);
+}
 const GOOGLE_DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
 
 console.log('[Auth] Google 인증 객체 생성을 시도합니다...');
 const serviceAccountAuth = new JWT({
