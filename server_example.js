@@ -1,10 +1,10 @@
 /*
- * [V3] Google Sheets, Drive, Email 각 단계의 연결 상태를
- * 아주 상세하게 추적하여 어디서 멈추는지 찾는 최종 디버깅 버전입니다.
+ * [V4 FINAL] 이메일 전송 기능을 제외하고, 오직 Google Drive와 Sheets에만
+ * 데이터를 안정적으로 저장하는 데 집중하는 최종 버전입니다.
+ * 각 단계의 성공/실패 여부를 명확히 추적합니다.
  */
 const express = require('express');
 const multer = require('multer');
-const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
@@ -19,7 +19,7 @@ const port = process.env.PORT || 3000;
 console.log('[System] 서버 시작 프로세스 개시...');
 const requiredEnvVars = [
     'SPREADSHEET_ID', 'GOOGLE_SERVICE_ACCOUNT_EMAIL', 'GOOGLE_PRIVATE_KEY',
-    'GOOGLE_DRIVE_FOLDER_ID', 'GMAIL_USER', 'GMAIL_PASS'
+    'GOOGLE_DRIVE_FOLDER_ID'
 ];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
@@ -59,11 +59,13 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
     const participantInfo = JSON.parse(req.body.participantInfo);
     const participantName = participantInfo.name || 'UnknownParticipant';
     console.log(`[Request] 참가자 이름: ${participantName}`);
+    
+    const fileLinks = {};
+    let isSuccess = true;
 
+    // --- STEP 1: Google Drive ---
     try {
-        // --- STEP 1: Google Drive ---
         console.log("\n--- STEP 1: Google Drive 파일 업로드 시작 ---");
-        const fileLinks = {};
         for (const file of files) {
             console.log(`[Drive] '${file.originalname}' 업로드 시도...`);
             const driveResponse = await drive.files.create({
@@ -85,48 +87,52 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
             if (key) fileLinks[key] = link;
         }
         console.log("--- STEP 1: Google Drive 파일 업로드 완료 ---\n");
-
-
-        // --- STEP 2: Google Sheets ---
-        console.log("--- STEP 2: Google Sheets 데이터 추가 시작 ---");
-        console.log("[Sheets] 시트 정보 로딩 시도...");
-        await doc.loadInfo();
-        const sheet = doc.sheetsByIndex[0];
-        console.log(`[Sheets] '${sheet.title}' 시트 로딩 성공.`);
-        const newRow = { ...participantInfo, ...participantInfo.surveyData, ...fileLinks };
-        delete newRow.surveyData; // 중복 데이터 정리
-        await sheet.addRow(newRow, { insert: true });
-        console.log("[Sheets] 새로운 행 추가 성공.");
-        console.log("--- STEP 2: Google Sheets 데이터 추가 완료 ---\n");
-
-
-        // --- STEP 3: Nodemailer ---
-        console.log("--- STEP 3: GMAIL 이메일 전송 시작 ---");
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS },
-        });
-        const sheetUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}`;
-        const mailOptions = {
-            from: process.env.GMAIL_USER,
-            to: 'y1208kr@gmail.com',
-            subject: `[AI 면접 결과 제출] ${participantName}님의 응답이 도착했습니다.`,
-            html: `<p>${participantName}님의 새로운 AI 면접 결과가 제출되었습니다.</p><p>아래 링크를 클릭하여 전체 결과를 확인하세요:</p><a href="${sheetUrl}" target="_blank">결과 시트 바로가기</a>`,
-        };
-        const info = await transporter.sendMail(mailOptions);
-        console.log('[Email] 이메일 전송 성공:', info.response);
-        console.log("--- STEP 3: GMAIL 이메일 전송 완료 ---\n");
-
-        res.status(200).send('성공적으로 제출되어 연구자에게 전달되었습니다.');
-
     } catch (error) {
-        console.error("\n[FATAL ERROR] 처리 중 심각한 오류가 발생했습니다:", error);
-        res.status(500).send('서버 처리 중 오류가 발생했습니다. 로그를 확인해주세요.');
-    } finally {
-        console.log("[System] 임시 파일 정리 작업을 수행합니다.");
-        files.forEach(file => fs.unlinkSync(file.path));
-        console.log("[System] 모든 작업이 완료되었습니다.\n");
+        console.error("\n[FATAL ERROR] Google Drive 처리 중 심각한 오류가 발생했습니다:", error);
+        isSuccess = false;
     }
+
+    // --- STEP 2: Google Sheets ---
+    if (isSuccess) {
+        try {
+            console.log("--- STEP 2: Google Sheets 데이터 추가 시작 ---");
+            console.log("[Sheets] 시트 정보 로딩 시도...");
+            await doc.loadInfo();
+            const sheet = doc.sheetsByIndex[0];
+            console.log(`[Sheets] '${sheet.title}' 시트 로딩 성공.`);
+            const newRow = { ...participantInfo, ...participantInfo.surveyData, ...fileLinks };
+            delete newRow.surveyData; // 중복 데이터 정리
+            
+            // 시트 헤더에 맞게 데이터 추가
+             const sheetHeaders = (sheet.headerValues || []);
+             const finalRowData = {};
+             sheetHeaders.forEach(header => {
+                 if (newRow[header] !== undefined) {
+                     finalRowData[header] = newRow[header];
+                 } else {
+                     finalRowData[header] = ''; // 값이 없는 경우 빈 칸으로 채움
+                 }
+             });
+
+            await sheet.addRow(finalRowData, { insert: true });
+            console.log("[Sheets] 새로운 행 추가 성공.");
+            console.log("--- STEP 2: Google Sheets 데이터 추가 완료 ---\n");
+        } catch (error) {
+            console.error("\n[FATAL ERROR] Google Sheets 처리 중 심각한 오류가 발생했습니다:", error);
+            isSuccess = false;
+        }
+    }
+
+    // --- 최종 응답 ---
+    if (isSuccess) {
+        res.status(200).send('성공적으로 제출되어 연구자에게 전달되었습니다.');
+    } else {
+        res.status(500).send('서버 처리 중 오류가 발생했습니다. 관리자에게 문의하세요.');
+    }
+
+    console.log("[System] 임시 파일 정리 작업을 수행합니다.");
+    files.forEach(file => fs.unlinkSync(file.path));
+    console.log("[System] 모든 작업이 완료되었습니다.\n");
 });
 
 app.listen(port, () => {
