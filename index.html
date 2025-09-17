@@ -46,6 +46,7 @@
         .recording-status.active { background: #ff4757; color: white; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 71, 87, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0); } }
         .timer { font-size: 2em; color: #495057; margin: 20px 0; font-weight: bold; text-align: center; font-variant-numeric: tabular-nums; }
+        .min-time-notice { font-size: 0.9em; color: #6c757d; text-align: center; margin-top: 10px; }
 
         /* 설문조사 스타일 */
         .survey-form-container { max-height: 50vh; overflow-y: auto; padding: 5px 15px 5px 5px; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 20px;}
@@ -98,23 +99,19 @@
         
         // --- Core Application Logic ---
         document.addEventListener('DOMContentLoaded', () => {
-            // 가장 먼저 마이크 권한을 확인
-            checkMicPermission();
+            showScreen('startScreen');
         });
 
-        async function checkMicPermission() {
+        async function checkAndRequestMicPermission() {
             try {
-                // 권한 요청을 통해 스트림을 얻고 바로 닫아서, 실제 녹음은 나중에 하도록 함
+                // 이 시점에서만 마이크 권한을 요청하고 바로 스트림을 닫습니다.
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 stream.getTracks().forEach(track => track.stop());
-                console.log("마이크 권한이 확인되었습니다.");
-                showScreen('startScreen'); // 권한 확인 후 시작 화면 표시
+                console.log('마이크 권한이 확인되었습니다.');
+                showInfoForm(); // 권한 확인 후 정보 입력 화면으로 이동
             } catch (err) {
                 console.error('마이크 접근 오류:', err);
-                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주시고, 페이지를 새로고침 해주세요.');
-                // 권한 거부 시 진행 불가 메시지 표시
-                const container = document.getElementById('container');
-                container.innerHTML = `<h1>권한 필요</h1><p class="ai-message">원활한 실험 진행을 위해 마이크 접근 권한이 반드시 필요합니다. 브라우저 주소창 왼쪽의 자물쇠 아이콘을 클릭하여 마이크 권한을 '허용'으로 변경한 뒤, 페이지를 새로고침 해주세요.</p>`;
+                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요. 권한 설정 후 페이지를 새로고침해야 할 수 있습니다.');
             }
         }
 
@@ -138,7 +135,7 @@
                         <div class="consent-form">
                             <h3>연구 참여 동의서</h3>
                             <p>안녕하세요. 본 연구는 "AI 면접의 상호작용 공정성이 조직 매력도에 미치는 영향"을 주제로 하는 실험 연구입니다. (연구책임자: ${researcherName})</p>
-                            <p>잠시 시간을 내어 연구에 참여해주시면, AI 채용 시스템의 발전에 기여하는 소중한 데이터로 활용될 것입니다. 참여 과정에서 경험하시는 모든 내용은 익명으로 처리되오니 편안한 마음으로 임해주십시오.</p>
+                            <p>잠시 시간을 내어 연구에 참여해주시면, AI 채용 시스템의 발전에 기여하는 소중한 데이터로 활용될 것입니다. 참여 과정에서 경험하시는 모든 내용은 익명으로 처리되오니 편안한 마음으로 임해주십시오. 설문 문항이나 녹음 등 조사를 성실히 완료해주신 분께는 감사의 의미로 소정의 사례비(3만원)를 드립니다.</p>
                         </div>
                          <div class="checkbox-container">
                             <input type="checkbox" id="consentCheck1">
@@ -146,8 +143,8 @@
                         </div>
                         <div class="consent-form">
                             <h3>개인정보 수집·이용 동의서</h3>
-                            <p><strong>1. 수집·이용 목적:</strong> 학술 연구 목적의 통계 분석</p>
-                            <p><strong>2. 수집 항목:</strong> [필수] 이름, 성별, 연령대, 직업상태, 전공계열, AI면접경험, AI기술 인식, 음성녹음파일</p>
+                            <p><strong>1. 수집·이용 목적:</strong> 학술 연구 목적의 통계 분석 및 사례비 지급</p>
+                            <p><strong>2. 수집 항목:</strong> [필수] 이름, 성별, 연령대, 직업상태, 전공계열, AI면접경험, AI기술 인식, 전화번호, 은행명, 계좌번호, 음성녹음파일</p>
                             <p><strong>3. 보유 및 이용 기간:</strong> 연구 종료 후 3년 (이후 즉시 파기)</p>
                             <p><strong>4. 동의 거부 권리:</strong> 귀하는 개인정보 수집·이용에 대한 동의를 거부할 권리가 있습니다. 단, 동의 거부 시 연구 참여가 제한될 수 있습니다.</p>
                         </div>
@@ -156,7 +153,7 @@
                             <label for="consentCheck2">위 개인정보 수집·이용에 동의합니다.</label>
                         </div>
                         <div style="text-align: center;">
-                            <button class="btn" onclick="showInfoForm()" id="startBtn" disabled>다음</button>
+                            <button class="btn" onclick="checkAndRequestMicPermission()" id="startBtn" disabled>다음</button>
                         </div>
                     `;
                 case 'infoScreen':
@@ -168,9 +165,13 @@
                                     <div class="form-group"><label for="participantName">이름</label><input type="text" id="participantName" required></div>
                                     <div class="form-group"><label for="gender">성별</label><select id="gender" required><option value="">선택</option><option value="male">남성</option><option value="female">여성</option></select></div>
                                     <div class="form-group"><label for="ageGroup">연령대</label><select id="ageGroup" required><option value="">선택</option><option value="20s">20대</option><option value="30s">30대</option><option value="40s">40대</option><option value="50s_over">50대 이상</option></select></div>
-                                    <div class="form-group"><label for="jobStatus">현재 직업 상태</label><select id="jobStatus" required><option value="">선택</option><option value="student_undergrad">대학생</option><option value="student_grad">대학원생</option><option value="job_seeker">취업준비생</option><option value="employee">직장인</option><option value="entrepreneur">개인 사업자</option></select></div>
+                                    <div class="form-group"><label for="jobStatus">현재 직업 상태</label><select id="jobStatus" required><option value="">선택</option><option value="student_undergrad">대학생</option><option value="student_grad">대학원생</option><option value="job_seeker">취업준비생</option><option value="employee">직장인</option><option value="entrepreneur">개인 사업자</option><option value="etc">기타</option></select></div>
                                     <div class="form-group"><label for="major">전공 계열</label><select id="major" required><option value="">선택</option><option value="humanities">인문/사회</option><option value="natural_science">자연/공학</option><option value="arts_sports">예체능</option><option value="etc">기타</option></select></div>
                                     <div class="form-group"><label for="aiExperience">AI 면접 경험</label><select id="aiExperience" required><option value="">선택</option><option value="yes">있음</option><option value="no">없음</option></select></div>
+                                    <!-- 추가된 필드 -->
+                                    <div class="form-group"><label for="phone">전화번호</label><input type="tel" id="phone" placeholder="010-1234-5678" required></div>
+                                    <div class="form-group"><label for="bankName">은행명</label><input type="text" id="bankName" placeholder="예: 국민은행" required></div>
+                                    <div class="form-group"><label for="accountNumber">계좌번호</label><input type="text" id="accountNumber" placeholder="'-' 없이 숫자만 입력" required></div>
                                 </div>
                                 <div class="form-group">
                                     <label for="aiAttitude">평소 AI 기술에 대한 인식</label>
@@ -187,7 +188,7 @@
                             </form>
                         </div>
                     `;
-                case 'introScreen':
+                 case 'introScreen':
                     return `
                         <h1>AI 면접 안내</h1>
                         <div class="ai-message">면접을 시작하겠습니다.</div>
@@ -209,7 +210,7 @@
                             <div class="timer" id="prepTimerDisplay">01:00</div>
                         </div>
                         <div style="text-align: center;">
-                            <button type="button" class="btn" onclick="startRecording()" id="recordBtn">답변 녹음 시작</button>
+                            <button type="button" class="btn" onclick="handleRecording()" id="recordBtn">답변 녹음 시작</button>
                         </div>
                     `;
                 case 'recordingScreen':
@@ -222,10 +223,10 @@
                         <div style="text-align: center; margin-top: 20px;">
                            <div class="recording-status active">🔴 녹음 중</div>
                            <div class="timer" id="recordingTimer">00:00 / 01:30</div>
-                           <p id="minRecordingTime" style="color: #ff4757; margin-top: 10px;"></p>
+                           <div class="min-time-notice" id="minTimeNotice">20초 후에 녹음 완료 버튼이 활성화됩니다.</div>
                         </div>
                         <div style="text-align: center;">
-                           <button type="button" class="btn" id="stopRecordingBtn" onclick="stopRecording()" disabled>녹음 완료</button>
+                           <button type="button" class="btn" onclick="stopRecording()" id="stopRecordBtn" disabled>녹음 완료</button>
                         </div>
                     `;
                 case 'surveyScreen':
@@ -248,7 +249,7 @@
                                 </div>
                                  <div style="text-align: center;">
                                     <button type="button" class="btn" onclick="submitSurvey()">최종 제출</button>
-                                </div>
+                                 </div>
                             </form>
                         </div>
                     `;
@@ -309,6 +310,9 @@
                 major: document.getElementById('major').value,
                 aiExperience: document.getElementById('aiExperience').value,
                 aiAttitude: document.getElementById('aiAttitude').value,
+                phone: document.getElementById('phone').value,
+                bankName: document.getElementById('bankName').value,
+                accountNumber: document.getElementById('accountNumber').value,
                 condition: 'general_ai',
                 timestamp: new Date().toISOString()
             };
@@ -321,74 +325,92 @@
             
             prepTimerInterval = setInterval(() => {
                 seconds--;
-                const secs = seconds.toString().padStart(2, '0');
-                timerDisplay.textContent = `00:${secs}`;
+                const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const secs = (seconds % 60).toString().padStart(2, '0');
+                if(timerDisplay) timerDisplay.textContent = `${mins}:${secs}`;
+                
                 if (seconds <= 0) {
                     clearInterval(prepTimerInterval);
-                    document.getElementById('prepTimer').innerHTML = '<h3 style="color: #28a745;">준비 시간이 종료되었습니다. 녹음 버튼을 눌러 답변을 시작하세요.</h3>';
+                    if(document.getElementById('prepTimer')) {
+                         document.getElementById('prepTimer').innerHTML = '<h3 style="color: #28a745;">준비 시간이 종료되었습니다. 녹음 버튼을 눌러 답변을 시작하세요.</h3>';
+                    }
                 }
             }, 1000);
         }
 
-        async function startRecording() {
-            clearInterval(prepTimerInterval); // 준비 타이머 중지
-            showScreen('recordingScreen');
-            
+        async function handleRecording() {
+            clearInterval(prepTimerInterval);
+            const recordBtn = document.getElementById('recordBtn');
+            if(recordBtn) {
+                recordBtn.disabled = true;
+                recordBtn.textContent = "권한 확인 중...";
+            }
+
             try {
                 audioStream = await navigator.mediaDevices.getUserMedia({ 
                     audio: { echoCancellation: true, noiseSuppression: true } 
                 });
-                
-                let audioChunks = [];
-                mediaRecorder = new MediaRecorder(audioStream);
-
-                mediaRecorder.ondataavailable = event => {
-                    if (event.data.size > 0) {
-                        audioChunks.push(event.data);
-                    }
-                };
-
-                mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    allAudioBlobs.push(audioBlob);
-                    if (audioStream) {
-                        audioStream.getTracks().forEach(track => track.stop());
-                        audioStream = null;
-                    }
-                };
-
-                mediaRecorder.start();
-                startRecordingTimer();
-
+                startRecording();
             } catch (err) {
-                console.error('녹음 시작 오류:', err);
-                showModal('녹음을 시작하는 중 오류가 발생했습니다. 마이크 권한을 다시 확인해주세요.');
-                showScreen('questionScreen'); // 오류 발생 시 이전 화면으로 복귀
+                console.error('마이크 접근 오류:', err);
+                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요. 권한 설정 후 페이지를 새로고침해야 할 수 있습니다.');
+                if(recordBtn) {
+                    recordBtn.disabled = false;
+                    recordBtn.textContent = "답변 녹음 시작";
+                }
             }
+        }
+        
+        function startRecording() {
+            showScreen('recordingScreen');
+            let audioChunks = [];
+            
+            if (!audioStream) {
+                showModal('오디오 스트림을 사용할 수 없습니다. 페이지를 새로고침 해주세요.');
+                showScreen('questionScreen'); // 이전 화면으로 복귀
+                return;
+            }
+            mediaRecorder = new MediaRecorder(audioStream);
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                allAudioBlobs.push(audioBlob);
+                if (audioStream) {
+                    audioStream.getTracks().forEach(track => track.stop());
+                    audioStream = null;
+                }
+            };
+
+            mediaRecorder.start();
+            startRecordingTimer();
         }
 
         function startRecordingTimer() {
             let seconds = 0;
-            const minRecordTime = 20; // 최소 녹음 시간 (초)
-            const maxRecordTime = 90; // 최대 녹음 시간 (초)
             const timerDisplay = document.getElementById('recordingTimer');
-            const stopBtn = document.getElementById('stopRecordingBtn');
-            const minTimeDisplay = document.getElementById('minRecordingTime');
+            const stopBtn = document.getElementById('stopRecordBtn');
+            const minTimeNotice = document.getElementById('minTimeNotice');
             
             recordingTimerInterval = setInterval(() => {
                 seconds++;
                 const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
                 const secs = (seconds % 60).toString().padStart(2, '0');
-                timerDisplay.textContent = `${mins}:${secs} / ${Math.floor(maxRecordTime/60).toString().padStart(2, '0')}:${(maxRecordTime%60).toString().padStart(2, '0')}`;
+                if(timerDisplay) timerDisplay.textContent = `${mins}:${secs} / 01:30`;
 
-                if (seconds >= minRecordTime) {
-                    stopBtn.disabled = false;
-                    minTimeDisplay.textContent = '';
+                if (seconds >= 20) {
+                    if(stopBtn) stopBtn.disabled = false;
+                    if(minTimeNotice) minTimeNotice.textContent = '이제 녹음을 완료할 수 있습니다.';
                 } else {
-                    minTimeDisplay.textContent = `${minRecordTime - seconds}초 더 녹음해야 합니다.`;
+                    if(minTimeNotice) minTimeNotice.textContent = `${20 - seconds}초 후에 녹음 완료 버튼이 활성화됩니다.`;
                 }
 
-                if (seconds >= maxRecordTime) {
+                if (seconds >= 90) {
                     stopRecording();
                 }
             }, 1000);
@@ -431,73 +453,66 @@
         }
 
         function generateAndPrepareFiles() {
-            // --- 1. 연구 동의서 및 인적 정보 PDF 생성 ---
             const { jsPDF } = window.jspdf;
+            const participantName = participantInfo.name || 'Unknown';
+            const dataToSend = new FormData();
+
+            // PDF 1: 동의서 및 인적 정보
             const consentDoc = new jsPDF();
-            const participantName = participantInfo.name || 'UnknownParticipant';
-
-            consentDoc.setFont('helvetica', 'normal');
-            consentDoc.text(`Participant Name: ${participantName}`, 10, 10);
-            consentDoc.text("--------------------------------------------------", 10, 15);
-            consentDoc.text("Research Participation and Personal Information Agreement", 10, 25);
-            consentDoc.text("Agreed to participate in research: Yes", 10, 35);
-            consentDoc.text("Agreed to personal data collection: Yes", 10, 45);
+            consentDoc.addFont('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/Pretendard-Regular.ttf', 'Pretendard', 'normal');
+            consentDoc.setFont('Pretendard');
             
-            consentDoc.text("Participant Information", 10, 65);
-            let y = 75;
+            consentDoc.text("연구 참여 및 개인정보 수집·이용 동의서", 10, 10);
+            consentDoc.text(`연구 참여 동의: 예`, 10, 20);
+            consentDoc.text(`개인정보 수집 동의: 예`, 10, 30);
+            consentDoc.text("---", 10, 40)
+            consentDoc.text("참가자 인적 정보", 10, 50);
+            let y = 60;
             for(const [key, value] of Object.entries(participantInfo)) {
-                 if (key !== 'surveyData' && key !== 'condition' && key !== 'timestamp') {
-                     consentDoc.text(`${key}: ${value}`, 10, y);
-                     y += 10;
-                 }
+                if (key !== 'surveyData' && key !== 'condition' && key !== 'timestamp') {
+                    consentDoc.text(`${key}: ${value}`, 10, y);
+                    y += 10;
+                }
             }
-            const consentPdfBlob = consentDoc.output('blob');
+            dataToSend.append(`${participantName}_consent_info.pdf`, consentDoc.output('blob'), `${participantName}_consent_info.pdf`);
 
-            // --- 2. 설문 결과 PDF 생성 ---
+            // PDF 2: 사후 설문조사
             const surveyDoc = new jsPDF();
-            surveyDoc.setFont('helvetica', 'normal');
-            surveyDoc.text(`Participant Name: ${participantName}`, 10, 10);
-            surveyDoc.text("--------------------------------------------------", 10, 15);
-            surveyDoc.text("Post-Interview Survey Results", 10, 25);
-            let surveyY = 35;
+            surveyDoc.addFont('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/Pretendard-Regular.ttf', 'Pretendard', 'normal');
+            surveyDoc.setFont('Pretendard');
+            surveyDoc.text("사후 설문조사 결과", 10, 10);
+            surveyDoc.text(`참가자: ${participantName}`, 10, 20);
+            let surveyY = 30;
             for(const [key, value] of Object.entries(participantInfo.surveyData)) {
                 surveyDoc.text(`${key}: ${value}`, 10, surveyY);
                 surveyY += 10;
-                if (surveyY > 280) { // 페이지 넘어갈 경우
+                if (surveyY > 280) { // 페이지 넘김 처리
                     surveyDoc.addPage();
                     surveyY = 10;
                 }
             }
-            const surveyPdfBlob = surveyDoc.output('blob');
+            dataToSend.append(`${participantName}_survey_results.pdf`, surveyDoc.output('blob'), `${participantName}_survey_results.pdf`);
 
-
-            // --- 3. 서버 전송을 위한 FormData 객체 생성 ---
-            const dataToSend = new FormData();
-            dataToSend.append('participantInfo', JSON.stringify(participantInfo)); 
-            
-            dataToSend.append(`${participantName}_consent_info.pdf`, consentPdfBlob, `${participantName}_consent_info.pdf`);
-            dataToSend.append(`${participantName}_survey.pdf`, surveyPdfBlob, `${participantName}_survey.pdf`);
-            
+            // 오디오 파일 추가
             allAudioBlobs.forEach((blob, index) => {
-                const fileName = `${participantName}_q${index+1}_audio.mp4`; // 요청에 따라 mp4 확장자 사용
-                dataToSend.append(fileName, blob, fileName);
+                const fileName = `${participantName}_q${index + 1}_audio.webm`;
+                dataToSend.append(`audio_q${index+1}`, blob, fileName);
             });
             
-            console.log("--- 데이터 서버로 전송 시도 ---");
+            // 참가자 정보 JSON 추가 (서버에서 시트 기록용)
+            dataToSend.append('participantInfo', JSON.stringify(participantInfo));
+
+            console.log("--- 데이터 전송 준비 완료 ---");
+            // 실제 서버 전송 로직
             
-            // 서버로 데이터 전송
             fetch('https://ai-interview-server-cwvf.onrender.com/upload-and-email', {
                 method: 'POST',
                 body: dataToSend
             })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Server responded with an error.');
-                }
-                return response.text();
-            })
+            .then(response => response.text())
             .then(data => {
                 console.log('서버 응답:', data);
+                showModal(data);
             })
             .catch(error => {
                 console.error('전송 실패:', error);
