@@ -1,7 +1,6 @@
 /*
- * [V7 FINAL-FIREBASE] 모든 Google Drive/Sheets 의존성을 제거하고,
- * 훨씬 더 안정적인 Firebase Firestore(DB)와 Storage(파일)를 사용하는 최종 버전입니다.
- * 이 코드는 권한 문제에서 자유롭습니다.
+ * [V8 FINAL-ENCODING-FIX] 한글(UTF-8) 문자 깨짐(Mojibake) 현상을 해결하기 위한
+ * 인코딩 복원 로직이 추가된 최종 안정화 버전입니다.
  */
 const express = require('express');
 const multer = require('multer');
@@ -47,17 +46,36 @@ const bucket = admin.storage().bucket();
 app.use(cors());
 const upload = multer({ dest: 'uploads/' });
 
+/**
+ * UTF-8 문자가 latin1(ISO-8859-1)으로 잘못 해석되어 깨졌을 때(Mojibake) 복원하는 함수.
+ * @param {string} brokenString - 깨진 문자열
+ * @returns {string} 복원된 문자열
+ */
+function fixEncoding(brokenString) {
+    try {
+        // latin1으로 해석된 바이트를 가져와서, UTF-8로 다시 올바르게 인코딩합니다.
+        const buffer = Buffer.from(brokenString, 'latin1');
+        return buffer.toString('utf8');
+    } catch (e) {
+        console.error('[Encoding] 문자열 복원 중 오류 발생:', e);
+        return brokenString; // 실패 시 원본 문자열 반환
+    }
+}
+
+
 // --- 서버 메인 로직 ---
 app.post('/upload-and-email', upload.any(), async (req, res) => {
     console.log("\n///////////////////////////////////////////////////////////");
     console.log("[Request] 새로운 면접 결과 요청을 받았습니다.");
 
     const files = req.files;
-    const participantInfo = JSON.parse(req.body.participantInfo);
+    
+    // ** [FIX] 깨진 한글(참가자 정보) 복원 **
+    const participantInfo = JSON.parse(fixEncoding(req.body.participantInfo));
     const participantName = participantInfo.name || 'UnknownParticipant';
     const timestamp = new Date().toISOString();
     const docId = `${timestamp}_${participantName}`;
-    console.log(`[Request] 참가자 이름: ${participantName}`);
+    console.log(`[Request] 참가자 이름: ${participantName} (인코딩 복원 완료)`);
 
     const fileLinks = {};
     let isSuccess = true;
@@ -66,22 +84,23 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
     try {
         console.log("\n--- STEP 1: Firebase Storage 파일 업로드 시작 ---");
         for (const file of files) {
-            const destination = `results/${docId}/${file.originalname}`;
-            console.log(`[Storage] '${file.originalname}' 업로드 시도... (경로: ${destination})`);
+            // ** [FIX] 깨진 한글(파일 이름) 복원 **
+            const originalFilename = fixEncoding(file.originalname);
+            const destination = `results/${docId}/${originalFilename}`;
+            console.log(`[Storage] '${originalFilename}' 업로드 시도... (경로: ${destination})`);
             
             await bucket.upload(file.path, {
                 destination: destination,
                 metadata: { contentType: file.mimetype }
             });
             
-            // 공개 URL 생성
             const uploadedFile = bucket.file(destination);
             const [url] = await uploadedFile.getSignedUrl({
                 action: 'read',
-                expires: '03-09-2491' // 아주 먼 미래 날짜로 설정하여 사실상 영구 링크로 만듭니다.
+                expires: '03-09-2491'
             });
 
-            console.log(`[Storage] '${file.originalname}' 업로드 및 링크 생성 성공.`);
+            console.log(`[Storage] '${originalFilename}' 업로드 및 링크 생성 성공.`);
             
             let key;
             if (file.fieldname.includes('audio')) {
@@ -105,9 +124,9 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
             const newRow = { 
                 ...combinedData, 
                 ...fileLinks,
-                timestamp: admin.firestore.FieldValue.serverTimestamp() // 서버 시간 기준 기록
+                timestamp: admin.firestore.FieldValue.serverTimestamp()
             };
-            delete newRow.surveyData; // 중복 데이터 정리
+            delete newRow.surveyData;
             
             await db.collection('interviewResults').doc(docId).set(newRow);
             console.log(`[Firestore] Document ID '${docId}' 로 데이터 추가 성공.`);
