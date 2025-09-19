@@ -1,859 +1,191 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 면접 시스템 - 일반형</title>
-    <!-- jsPDF 라이브러리: PDF 생성을 위해 필요 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <style>
-        /* 기본 스타일 */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #6c757d 0%, #343a40 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .container { background: rgba(255, 255, 255, 0.98); border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); max-width: 800px; width: 100%; padding: 40px; backdrop-filter: blur(10px); animation: fadeIn 0.5s ease-out; position: relative; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* 진행률 표시 바 추가 */
-        .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: #e9ecef;
-            border-radius: 3px;
-            margin-bottom: 30px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #495057, #6c757d);
-            border-radius: 3px;
-            transition: width 0.5s ease;
-        }
-        .progress-text {
-            text-align: center;
-            font-size: 0.9em;
-            color: #6c757d;
-            margin-bottom: 10px;
-        }
-        
-        /* 화면 전환 스타일 */
-        .screen { display: none; animation: slideIn 0.4s ease-out; }
-        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-        .screen.active { display: block; }
+/*
+ * [V19 STRUCTURED-DATA] 데이터를 구조화하여 분석 가능한 형태로 저장
+ * - 참가자 정보, 설문 응답, 파일 링크를 별도 필드로 구분
+ * - 데이터 분석이 용이한 구조로 변경하고, 모든 텍스트 필드에 인코딩 복원을 적용합니다.
+ */
+const express = require('express');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
+const admin = require('firebase-admin');
 
-        /* 공통 UI 요소 */
-        h1 { color: #333; margin-bottom: 30px; font-size: 2em; text-align: center; background: linear-gradient(135deg, #495057, #212529); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        p { line-height: 1.7; color: #495057; }
-        .btn { background: #495057; color: white; border: none; padding: 15px 40px; font-size: 1.1em; border-radius: 50px; cursor: pointer; transition: all 0.3s ease; margin: 10px; box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3); }
-        .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108, 117, 125, 0.4); }
-        .btn:disabled { background: #adb5bd; cursor: not-allowed; transform: none; box-shadow: none; }
-        .btn-secondary { background: transparent; color: #495057; border: 2px solid #495057; }
-        .btn-secondary:hover:not(:disabled) { background: #495057; color: white; }
-        .ai-message { background: #f8f9fa; border-left: 4px solid #6c757d; padding: 20px; margin: 20px 0; border-radius: 8px; line-height: 1.8; color: #495057; font-size: 1.05em; }
-        
-        /* 동의서 및 폼 스타일 */
-        .consent-form { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; }
-        .consent-form h3 { color: #343a40; margin-bottom: 15px; position: sticky; top: 0; background: #f8f9fa; padding: 10px 0; }
-        .checkbox-container { margin: 15px 0; display: flex; align-items: center; gap: 10px; padding: 15px; background: #e8f4ff; border-radius: 8px; transition: all 0.3s; }
-        .checkbox-container:hover { background: #d1e7ff; }
-        .checkbox-container input { width: 20px; height: 20px; cursor: pointer; }
-        .checkbox-container label { cursor: pointer; color: #495057; font-weight: 500; flex: 1; }
-        .info-form { background: #f8f9fa; padding: 25px; border-radius: 10px; margin: 20px 0; }
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
-        .form-group { margin: 10px 0; }
-        .form-group label { display: block; margin-bottom: 8px; color: #495057; font-weight: 500; }
-        .form-group label .required { color: #dc3545; }
-        .form-group input, .form-group select { width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 1em; transition: border-color 0.3s; }
-        .form-group input:focus, .form-group select:focus { outline: none; border-color: #6c757d; }
-        .form-group input:invalid:not(:placeholder-shown), .form-group select:invalid:not(:placeholder-shown) { border-color: #dc3545; }
-        .form-group .helper-text { font-size: 0.85em; color: #6c757d; margin-top: 5px; }
+const app = express();
+const port = process.env.PORT || 3000;
 
-        /* 면접 진행 스타일 */
-        .question-box { background: #fff; border: 1px solid #e9ecef; border-radius: 12px; padding: 25px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .question-number { color: #6c757d; font-weight: bold; font-size: 1.2em; margin-bottom: 10px; }
-        .prep-timer { text-align: center; margin: 30px 0; padding: 20px; background: #fff3cd; border-radius: 10px; border: 1px solid #ffeaa7; }
-        .recording-status { display: inline-block; padding: 10px 20px; background: #f8f9fa; border-radius: 25px; margin-bottom: 20px; font-weight: 500; }
-        .recording-status.active { background: #ff4757; color: white; animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 71, 87, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0); } }
-        .timer { font-size: 2.5em; color: #495057; margin: 20px 0; font-weight: bold; text-align: center; font-variant-numeric: tabular-nums; }
-        .timer.warning { color: #dc3545; animation: blink 1s infinite; }
-        @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.5; } }
-        .min-rec-timer { text-align: center; color: #dc3545; font-weight: 500; margin-top: 10px;}
-        
-        /* 음성 레벨 표시기 추가 */
-        .audio-level {
-            margin: 20px auto;
-            width: 200px;
-            height: 30px;
-            background: #e9ecef;
-            border-radius: 15px;
-            overflow: hidden;
-            display: none;
-        }
-        .audio-level.active { display: block; }
-        .audio-level-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #28a745, #ffc107, #dc3545);
-            width: 0%;
-            transition: width 0.1s ease;
-            border-radius: 15px;
-        }
+// --- 시작 전 필수 환경 변수 확인 ---
+console.log('[System] 서버 시작 프로세스 개시...');
+const requiredEnvVars = ['FIREBASE_SERVICE_ACCOUNT_KEY_JSON', 'FIREBASE_STORAGE_BUCKET'];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
-        /* 설문조사 스타일 */
-        .survey-form-container { max-height: 50vh; overflow-y: auto; padding: 5px 15px 5px 5px; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 20px;}
-        .survey-group { margin-bottom: 30px; }
-        .survey-group h3 { color: #343a40; margin-bottom: 20px; border-bottom: 2px solid #e9ecef; padding-bottom: 10px; font-size: 1.2em; }
-        .survey-item { margin-bottom: 25px; padding: 15px; background: #fff; border-radius: 8px; transition: all 0.3s; }
-        .survey-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .survey-item p { margin-bottom: 15px; color: #212529; font-weight: 500; font-size: 1.05em;}
-        .likert-scale { display: flex; justify-content: space-between; align-items: center; list-style: none; padding: 0; max-width: 500px; margin: 10px auto 0; }
-        .likert-scale li { display: flex; flex-direction: column; align-items: center; flex: 1; }
-        .likert-scale input[type="radio"] { margin-bottom: 5px; width: 20px; height: 20px; cursor: pointer; }
-        .likert-scale input[type="radio"]:hover { transform: scale(1.2); }
-        .likert-scale label { font-size: 0.85em; color: #6c757d; text-align: center; cursor: pointer; }
-        
-        /* 설문 진행 상황 표시 */
-        .survey-progress {
-            text-align: right;
-            font-size: 0.9em;
-            color: #6c757d;
-            margin-bottom: 10px;
-        }
+if (missingVars.length > 0) {
+    console.error(`[FATAL ERROR] 서버 시작 실패! 아래의 필수 환경 변수가 설정되지 않았습니다:`);
+    console.error(missingVars.join(', '));
+    process.exit(1);
+}
+console.log('[System] 모든 환경 변수가 설정된 것을 확인했습니다.');
 
-        /* 모달 스타일 */
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 1000; animation: fadeInModal 0.3s; }
-        @keyframes fadeInModal { from { opacity: 0; } to { opacity: 1; } }
-        .modal-content { background: white; padding: 30px; border-radius: 15px; text-align: center; max-width: 400px; width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
-        .modal-content p { margin-bottom: 20px; font-size: 1.1em; color: #495057; line-height: 1.6; }
-        .modal-overlay.active { display: flex; }
-        
-        /* 로딩 스피너 */
-        .loading-spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #495057;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        /* 툴팁 스타일 */
-        .tooltip {
-            position: relative;
-            display: inline-block;
-            cursor: help;
-        }
-        .tooltip .tooltiptext {
-            visibility: hidden;
-            width: 200px;
-            background-color: #495057;
-            color: #fff;
-            text-align: center;
-            padding: 8px;
-            border-radius: 6px;
-            position: absolute;
-            z-index: 1;
-            bottom: 125%;
-            left: 50%;
-            margin-left: -100px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            font-size: 0.85em;
-        }
-        .tooltip:hover .tooltiptext {
-            visibility: visible;
-            opacity: 1;
-        }
+// --- Firebase Admin SDK 초기화 ---
+try {
+    console.log('[Auth] Firebase 서비스 계정 키 파싱 시도...');
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY_JSON);
+    console.log('[Auth] Firebase 서비스 계정 키 파싱 성공.');
 
-        /* 반응형 디자인 개선 */
-        @media (max-width: 768px) {
-            .container { padding: 20px; }
-            h1 { font-size: 1.5em; }
-            .btn { padding: 12px 30px; font-size: 1em; }
-            .timer { font-size: 2em; }
-            .form-grid { grid-template-columns: 1fr; }
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET
+    });
+    console.log('[Auth] Firebase Admin SDK 초기화 성공.');
+} catch (error) {
+    console.error('[FATAL ERROR] Firebase 서비스 계정 키(.json) 형식이 올바르지 않습니다.', error);
+    process.exit(1);
+}
+
+const db = admin.firestore();
+const bucket = admin.storage().bucket();
+
+app.use(cors());
+const upload = multer({ dest: 'uploads/' });
+
+// 평균 계산 헬퍼 함수
+function calculateMean(values) {
+    const validValues = values.filter(v => v !== null && !isNaN(v));
+    if (validValues.length === 0) return null;
+    const sum = validValues.reduce((acc, val) => acc + val, 0);
+    return Math.round((sum / validValues.length) * 100) / 100; // 소수점 2자리
+}
+
+
+// --- 서버 메인 로직 ---
+app.post('/upload-and-email', upload.any(), async (req, res) => {
+    console.log("\n///////////////////////////////////////////////////////////");
+    console.log(`[V19-STRUCTURED] 새로운 면접 결과 요청을 받았습니다.`);
+
+    const files = req.files;
+    const timestamp = new Date().toISOString();
+
+    // --- 1단계: 모든 텍스트 데이터 인코딩 복원 ---
+    console.log('[Encoding] 텍스트 필드 인코딩 복원 시작...');
+    const rawData = {};
+    for (const key in req.body) {
+        const value = req.body[key];
+        if (typeof value === 'string') {
+            const restoredValue = Buffer.from(value, 'latin1').toString('utf8');
+            console.log(`[Encoding] ${key}: "${value}" → "${restoredValue}"`);
+            rawData[key] = restoredValue;
+        } else {
+            rawData[key] = value;
         }
-    </style>
-</head>
-<body>
-    <div class="container" id="container">
-        <!-- 화면 내용은 JavaScript로 동적 생성 -->
-    </div>
+    }
+    console.log('[Encoding] 인코딩 복원 완료.');
     
-    <div id="modal" class="modal-overlay">
-        <div class="modal-content">
-            <p id="modalMessage"></p>
-            <button class="btn" onclick="closeModal()">확인</button>
-        </div>
-    </div>
+    const participantName = rawData.name || 'UnknownParticipant';
+    const docId = `${timestamp}_${participantName}`;
+    console.log(`[Request] 참가자: ${participantName}`);
 
-    <script>
-        // --- Configuration ---
-        const researcherName = "염승빈";
-        const questions = [
-            "당신에 대해 소개해 주십시오.",
-            "리더십을 발휘했던 경험에 대해 말씀해 주십시오.",
-            "팀의 일원으로서 효과적으로 협업했던 경험에 대해 말씀해 주십시오."
-        ];
-        
-        const totalSteps = 7; // 전체 단계 수: 동의 > 정보입력 > 안내 > 질문1 > 질문2 > 질문3 > 설문
-        let currentStep = 0;
-        
-        // --- Global State ---
-        let participantInfo = {};
-        let allAudioBlobs = [];
-        let currentQuestionIndex = 0;
-        let mediaRecorder;
-        let audioStream = null;
-        let prepTimerInterval, recordingTimerInterval, minRecTimerInterval;
-        let audioContext, analyser, drawVisual;
-        const MIN_RECORDING_SECONDS = 20;
+    let isSuccess = true;
+    const fileLinks = { audioFiles: {}, pdfFiles: {} };
 
-        // --- Core Application Logic ---
-        document.addEventListener('DOMContentLoaded', () => {
-            showScreen('startScreen');
-            // 뒤로가기 방지
-            window.addEventListener('popstate', function(e) {
-                e.preventDefault();
-                showModal('브라우저 뒤로가기는 사용할 수 없습니다. 실험을 계속 진행해주세요.');
-                history.pushState(null, null, location.href);
-            });
-            history.pushState(null, null, location.href);
-        });
-
-        function updateProgress() {
-            const progressFill = document.querySelector('.progress-fill');
-            const progressText = document.querySelector('.progress-text');
-            if (progressFill && progressText) {
-                const percentage = Math.round((currentStep / totalSteps) * 100);
-                progressFill.style.width = `${percentage}%`;
-                progressText.textContent = `진행률: ${currentStep}/${totalSteps} 단계`;
-            }
-        }
-
-        function showScreen(screenId) {
-            const container = document.getElementById('container');
-
-            // 진행률 업데이트
-            switch(screenId) {
-                case 'startScreen': currentStep = 1; break;
-                case 'infoScreen': currentStep = 2; break;
-                case 'introScreen': currentStep = 3; break;
-                case 'questionScreen': currentStep = 3 + currentQuestionIndex + 1; break; // 질문 1,2,3 -> 4,5,6단계
-                case 'surveyScreen': currentStep = 7; break;
-            }
-
-            // 진행률 바 HTML
-            const progressHTML = (screenId !== 'finalCompleteScreen' && screenId !== '') ? `
-                <div class="progress-text"></div>
-                <div class="progress-bar">
-                    <div class="progress-fill"></div>
-                </div>
-            ` : '';
+    // --- 2단계: Firebase Storage 파일 업로드 ---
+    try {
+        console.log("\n--- Firebase Storage 파일 업로드 시작 ---");
+        for (const file of files) {
+            const originalFilename = Buffer.from(file.originalname, 'latin1').toString('utf8');
+            const destination = `results/${docId}/${originalFilename}`;
+            console.log(`[Storage] '${originalFilename}' 업로드 중...`);
             
-            container.innerHTML = progressHTML + getScreenHTML(screenId);
-            updateProgress();
-
-            if (screenId === 'startScreen') {
-                document.getElementById('consentCheck1').addEventListener('change', checkAllConsents);
-                document.getElementById('consentCheck2').addEventListener('change', checkAllConsents);
-            } else if (screenId === 'questionScreen') {
-                startPrepTimer();
-            } else if (screenId === 'surveyScreen') {
-                updateSurveyProgress();
-                // 설문 폼 내 라디오 버튼에 이벤트 리스너 추가
-                const radios = document.querySelectorAll('.survey-form-container input[type="radio"]');
-                radios.forEach(radio => radio.addEventListener('change', updateSurveyProgress));
-            }
-        }
-        
-        function getScreenHTML(screenId) {
-            switch(screenId) {
-                case 'startScreen':
-                    return `
-                        <h1>AI 면접 실험 참여 안내</h1>
-                        <div class="consent-form">
-                            <h3>연구 참여 동의서</h3>
-                            <p>안녕하세요. 본 연구는 "AI 면접의 상호작용 공정성이 조직 매력도에 미치는 영향"을 주제로 하는 실험 연구입니다. (연구책임자: ${researcherName})</p>
-                            <p>잠시 시간을 내어 연구에 참여해주시면, AI 채용 시스템의 발전에 기여하는 소중한 데이터로 활용될 것입니다. 참여 과정에서 경험하시는 모든 내용은 익명으로 처리되오니 편안한 마음으로 임해주십시오.</p>
-                            <p style="font-weight: bold; color: #007bff;">설문 문항이나 녹음 등 조사를 성실히 수행해주셨다고 판단되면, 감사의 의미로 소정의 사례비(3만원)를 드립니다.</p>
-                            <p style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 5px;">
-                                <strong>예상 소요 시간:</strong> 약 15-20분<br>
-                                <strong>준비 사항:</strong> 마이크가 연결된 조용한 환경
-                            </p>
-                        </div>
-                         <div class="checkbox-container">
-                            <input type="checkbox" id="consentCheck1">
-                            <label for="consentCheck1">위 내용을 모두 확인했으며, 연구 참여에 동의합니다.</label>
-                        </div>
-                        <div class="consent-form">
-                            <h3>개인정보 수집·이용 동의서</h3>
-                            <p><strong>1. 수집·이용 목적:</strong> 학술 연구 목적의 통계 분석 및 사례비 지급</p>
-                            <p><strong>2. 수집 항목:</strong> [필수] 이름, 성별, 연령대, 직업상태, 전공계열, AI면접경험, AI기술 인식, 음성녹음파일, 전화번호, 은행명, 계좌번호</p>
-                            <p><strong>3. 보유 및 이용 기간:</strong> 연구 종료 후 3년 (이후 즉시 파기)</p>
-                            <p><strong>4. 동의 거부 권리:</strong> 귀하는 개인정보 수집·이용에 대한 동의를 거부할 권리가 있습니다. 단, 동의 거부 시 연구 참여가 제한될 수 있습니다.</p>
-                        </div>
-                         <div class="checkbox-container">
-                            <input type="checkbox" id="consentCheck2">
-                            <label for="consentCheck2">위 개인정보 수집·이용에 동의합니다.</label>
-                        </div>
-                        <div style="text-align: center;">
-                            <button class="btn" onclick="requestMicPermission()" id="startBtn" disabled>다음 단계로</button>
-                        </div>
-                    `;
-                case 'infoScreen':
-                    return `
-                        <h1>참가자 정보 입력</h1>
-                        <div class="info-form">
-                            <form id="participantForm" novalidate>
-                                <div class="form-grid">
-                                    <div class="form-group">
-                                        <label for="name">이름 <span class="required">*</span></label>
-                                        <input type="text" id="name" name="name" required placeholder="실명 입력">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="gender">성별 <span class="required">*</span></label>
-                                        <select id="gender" name="gender" required>
-                                            <option value="">선택하세요</option>
-                                            <option value="male">남성</option>
-                                            <option value="female">여성</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="ageGroup">연령대 <span class="required">*</span></label>
-                                        <select id="ageGroup" name="ageGroup" required>
-                                            <option value="">선택하세요</option>
-                                            <option value="20s">20대</option>
-                                            <option value="30s">30대</option>
-                                            <option value="40s">40대</option>
-                                            <option value="50s_over">50대 이상</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="jobStatus">현재 직업 상태 <span class="required">*</span></label>
-                                        <select id="jobStatus" name="jobStatus" required>
-                                            <option value="">선택하세요</option>
-                                            <option value="student_undergrad">대학생</option>
-                                            <option value="student_grad">대학원생</option>
-                                            <option value="job_seeker">취업준비생</option>
-                                            <option value="employee">직장인</option>
-                                            <option value="entrepreneur">개인 사업자</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="major">전공 계열 <span class="required">*</span></label>
-                                        <select id="major" name="major" required>
-                                            <option value="">선택하세요</option>
-                                            <option value="humanities">인문/사회</option>
-                                            <option value="natural_science">자연/공학</option>
-                                            <option value="arts_sports">예체능</option>
-                                            <option value="etc">기타</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="aiExperience">AI 면접 경험 <span class="required">*</span></label>
-                                        <select id="aiExperience" name="aiExperience" required>
-                                            <option value="">선택하세요</option>
-                                            <option value="yes">있음</option>
-                                            <option value="no">없음</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="phone">전화번호 <span class="required">*</span>
-                                            <span class="tooltip">?
-                                                <span class="tooltiptext">사례비 지급 확인용입니다</span>
-                                            </span>
-                                        </label>
-                                        <input type="tel" id="phone" name="phone" required placeholder="010-1234-5678"
-                                                pattern="[0-9]{3}-[0-9]{3,4}-[0-9]{4}">
-                                        <span class="helper-text">형식: 010-1234-5678</span>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="bankName">은행명 <span class="required">*</span></label>
-                                        <input type="text" id="bankName" name="bankName" required placeholder="예: 국민은행">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="accountNumber">계좌번호 <span class="required">*</span></label>
-                                        <input type="text" id="accountNumber" name="accountNumber" required
-                                                placeholder="'-' 포함하여 입력">
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="aiAttitude">평소 AI 기술에 대한 인식 <span class="required">*</span></label>
-                                    <select id="aiAttitude" name="aiAttitude" required>
-                                        <option value="">선택하세요</option>
-                                        <option value="1">1 (매우 부정적)</option>
-                                        <option value="2">2 (부정적)</option>
-                                        <option value="3">3 (약간 부정적)</option>
-                                        <option value="4">4 (보통)</option>
-                                        <option value="5">5 (약간 긍정적)</option>
-                                        <option value="6">6 (긍정적)</option>
-                                        <option value="7">7 (매우 긍정적)</option>
-                                    </select>
-                                </div>
-                                <div style="text-align: center; margin-top:30px;">
-                                    <button type="button" class="btn" onclick="startInterview()">면접 시작하기</button>
-                                </div>
-                            </form>
-                        </div>
-                    `;
-                 case 'introScreen':
-                    return `
-                        <h1>AI 면접 안내</h1>
-                        <div class="ai-message">
-                            <h3 style="margin-bottom: 15px;">면접 진행 방식</h3>
-                            <ul style="list-style: none; padding: 0;">
-                                <li style="margin: 10px 0;">총 3개의 질문이 제시됩니다</li>
-                                <li style="margin: 10px 0;">각 질문마다 1분의 준비 시간이 주어집니다</li>
-                                <li style="margin: 10px 0;">최소 20초 ~ 최대 1분 30초 동안 답변을 녹음합니다</li>
-                                <li style="margin: 10px 0;">모든 답변 후 간단한 설문이 있습니다</li>
-                            </ul>
-                            <p style="margin-top: 20px; font-weight: bold;">준비되셨나요? 그럼 시작하겠습니다.</p>
-                        </div>
-                        <div style="text-align: center;">
-                            <button class="btn" onclick="startFirstQuestion()">면접 시작</button>
-                        </div>
-                    `;
-                 case 'questionScreen':
-                    const q_intro = currentQuestionIndex === 0 ? "첫 번째 질문입니다." :
-                                    (currentQuestionIndex === 1 ? "두 번째 질문입니다." : "마지막 질문입니다.");
-                    return `
-                        <h1>면접 질문 ${currentQuestionIndex + 1}/3</h1>
-                        <div class="ai-message">${q_intro}</div>
-                        <div class="question-box">
-                            <div class="question-number">질문 ${currentQuestionIndex + 1}</div>
-                            <p style="font-size: 1.2em; line-height: 1.8;">${questions[currentQuestionIndex]}</p>
-                        </div>
-                        <div class="prep-timer" id="prepTimer">
-                            <h3>답변 준비 시간</h3>
-                            <div class="timer" id="prepTimerDisplay">01:00</div>
-                            <p style="margin-top: 10px; font-size: 0.9em;">준비 시간 동안 답변을 구상해주세요</p>
-                        </div>
-                        <div style="text-align: center;">
-                            <button class="btn" onclick="startRecording()" id="recordBtn" disabled>
-                                답변 녹음 시작
-                            </button>
-                            <button class="btn btn-secondary" onclick="skipPrep()" id="skipBtn">
-                                준비됐어요
-                            </button>
-                        </div>
-                    `;
-                case 'recordingScreen':
-                    return `
-                        <h1>답변 녹음 중 (${currentQuestionIndex + 1}/3)</h1>
-                        <div class="question-box">
-                           <div class="question-number">질문 ${currentQuestionIndex + 1}</div>
-                           <p>${questions[currentQuestionIndex]}</p>
-                        </div>
-                        <div style="text-align: center; margin-top: 20px;">
-                           <div class="recording-status active">녹음 중</div>
-                           <div class="audio-level" id="audioLevel">
-                               <div class="audio-level-fill" id="audioLevelFill"></div>
-                           </div>
-                           <div class="timer" id="recordingTimer">00:00 / 01:30</div>
-                           <div class="min-rec-timer" id="minRecTimer"></div>
-                        </div>
-                        <div style="text-align: center; margin-top: 20px;">
-                           <button class="btn" id="stopRecBtn" onclick="stopRecording()" disabled>녹음 완료</button>
-                        </div>
-                    `;
-                case 'surveyScreen':
-                    return `
-                        <h1>사후 설문조사</h1>
-                        <p class="ai-message">면접 경험을 바탕으로, 아래 각 문항에 대해 귀하의 생각과 가장 가까운 번호에 체크해주세요.</p>
-                        <div class="survey-progress" id="surveyProgress"></div>
-                        <div class="survey-form-container">
-                            <form id="surveyForm">
-                                <div class="survey-group">
-                                    <h3>면접관(시스템)과의 상호작용</h3>
-                                    ${generateSurveyItems('ij', ['면접관(시스템)은 저를 존중하는 태도로 대했습니다.', '면접관(시스템)은 저에게 예의를 갖추어 대했습니다.', '면접관(시스템)은 저에게 부적절하거나 무례한 발언을 하지 않았습니다.', '면접관(시스템)은 저를 대할 때 개인적인 편견 없이 대했습니다.', '면접관(시스템)은 면접 절차에 대해 솔직하게 설명해 주었습니다.', '면접관(시스템)은 면접 절차에 대한 설명을 시의적절하게 제공했습니다.', '면접관(시스템)이 제공한 설명은 합리적으로 이해가 되었습니다.', '면접관(시스템)은 제가 궁금해할 만한 사항에 대해 충분한 정보를 제공했습니다.', '면접관(시스템)은 평가가 이루어지는 방식에 대해 명확하게 설명해 주었습니다.'])}
-                                </div>
-                                <div class="survey-group">
-                                    <h3>면접 절차 및 과정</h3>
-                                    ${generateSurveyItems('pj', ['면접 과정에서 제 견해나 의견을 표현할 기회를 가졌습니다.', '면접 절차는 모든 지원자에게 일관성 있게 적용되었을 것이라고 생각합니다.', '면접 절차는 개인적인 편견 없이 중립적으로 진행되었다고 생각합니다.', '면접 평가는 정확한 정보에 근거하여 이루어졌을 것이라고 생각합니다.', '만약 잘못된 평가가 내려졌을 경우, 이를 수정할 수 있는 공식적인 절차가 마련되어 있었을 것입니다.', '면접 절차는 채용 과정 전반의 가치와 윤리를 대표한다고 생각합니다.', '면접 절차는 일반적인 윤리 및 도덕 기준에 부합했습니다.'])}
-                                </div>
-                                <div class="survey-group">
-                                    <h3>면접 경험 후 기업에 대한 생각</h3>
-                                    ${generateSurveyItems('oa', ['이 회사는 일하기에 매력적인 곳이라고 생각합니다.', '이 회사에 대해 긍정적인 인상을 갖게 되었습니다.', '전반적으로, 이 회사를 높이 평가합니다.'])}
-                                </div>
-                                 <div style="text-align: center;">
-                                    <button type="button" class="btn" onclick="submitSurvey()">최종 제출하기</button>
-                                </div>
-                            </form>
-                        </div>
-                    `;
-                case 'finalCompleteScreen':
-                    return `
-                        <div style="text-align: center; padding: 40px;">
-                            <div class="loading-spinner" id="finalSpinner"></div>
-                            <div id="finalContent" style="display:none;">
-                                <h1 style="font-size: 2.5em; margin-bottom: 20px; background: none;">완료</h1>
-                                <h2>모든 실험이 완료되었습니다</h2>
-                                <p class="ai-message" style="margin-top: 20px; border-left-color: #28a745;">연구에 참여해주셔서 진심으로 감사합니다. 귀하의 소중한 데이터는 학술 발전에 큰 도움이 될 것입니다.</p>
-                                <p>창을 닫아주세요.</p>
-                            </div>
-                        </div>
-                    `;
-            }
-        }
-        
-        function generateSurveyItems(prefix, items) {
-            let html = '';
-            items.forEach((item, index) => {
-                const name = `${prefix}${index + 1}`;
-                html += `
-                    <div class="survey-item">
-                        <p>${index + 1}. ${item}</p>
-                        <ul class="likert-scale">
-                            <li><label for="${name}_1">전혀<br>아니다</label><input type="radio" id="${name}_1" name="${name}" value="1" required></li>
-                            <li><label for="${name}_2">2</label><input type="radio" id="${name}_2" name="${name}" value="2"></li>
-                            <li><label for="${name}_3">3</label><input type="radio" id="${name}_3" name="${name}" value="3"></li>
-                            <li><label for="${name}_4">보통</label><input type="radio" id="${name}_4" name="${name}" value="4"></li>
-                            <li><label for="${name}_5">5</label><input type="radio" id="${name}_5" name="${name}" value="5"></li>
-                            <li><label for="${name}_6">6</label><input type="radio" id="${name}_6" name="${name}" value="6"></li>
-                            <li><label for="${name}_7">매우<br>그렇다</label><input type="radio" id="${name}_7" name="${name}" value="7"></li>
-                        </ul>
-                    </div>
-                `;
-            });
-            return html;
-        }
-
-        function updateSurveyProgress() {
-            const progress = document.getElementById('surveyProgress');
-            if (!progress) return;
-
-            const totalQuestions = document.querySelectorAll('.survey-item').length;
-            const answeredQuestions = document.querySelectorAll('.survey-item input[type="radio"]:checked').length;
+            await bucket.upload(file.path, { destination: destination, metadata: { contentType: file.mimetype } });
             
-            progress.textContent = `응답률: ${answeredQuestions} / ${totalQuestions}`;
-        }
-
-
-        // --- Event Handlers & Logic ---
-        function checkAllConsents() {
-            const consent1 = document.getElementById('consentCheck1').checked;
-            const consent2 = document.getElementById('consentCheck2').checked;
-            document.getElementById('startBtn').disabled = !(consent1 && consent2);
-        }
-
-        async function requestMicPermission() {
-            try {
-                audioStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: true, noiseSuppression: true } 
-                });
-                audioStream.getTracks().forEach(track => track.stop());
-                audioStream = null;
-                showScreen('infoScreen');
-            } catch (err) {
-                console.error('마이크 접근 오류:', err);
-                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요. 권한 설정 후 페이지를 새로고침해야 할 수 있습니다.');
+            const uploadedFile = bucket.file(destination);
+            const [url] = await uploadedFile.getSignedUrl({ action: 'read', expires: '03-09-2491' });
+            
+            if (file.fieldname.startsWith('audio_q_')) {
+                const qNum = file.fieldname.split('_')[2];
+                fileLinks.audioFiles[`question_${qNum}`] = url;
+            } else if (file.fieldname.includes('consent')) {
+                fileLinks.pdfFiles.consent = url;
+            } else if (file.fieldname.includes('survey')) {
+                fileLinks.pdfFiles.survey = url;
             }
         }
+        console.log("--- Firebase Storage 파일 업로드 완료 ---\n");
+    } catch (error) {
+        console.error("\n[ERROR] Firebase Storage 처리 중 오류:", error);
+        isSuccess = false;
+    }
 
-        function startInterview() {
-            const form = document.getElementById('participantForm');
-            if (!form.checkValidity()) {
-                showModal('모든 필수 정보를 올바른 형식으로 입력해주세요.');
-                // Highlight first invalid field
-                for (let i = 0; i < form.elements.length; i++) {
-                    if (!form.elements[i].checkValidity()) {
-                        form.elements[i].focus();
-                        break;
-                    }
+    // --- 3단계: Firestore에 구조화된 데이터 저장 ---
+    if (isSuccess) {
+        try {
+            console.log("--- Firestore 데이터 저장 시작 ---");
+
+            // 참가자 정보 그룹
+            const participant = {
+                name: rawData.name || null, gender: rawData.gender || null, ageGroup: rawData.ageGroup || null,
+                jobStatus: rawData.jobStatus || null, major: rawData.major || null, aiExperience: rawData.aiExperience || null,
+                aiAttitude: rawData.aiAttitude ? parseInt(rawData.aiAttitude) : null, phone: rawData.phone || null,
+                bankName: rawData.bankName || null, accountNumber: rawData.accountNumber || null
+            };
+
+            // 설문 응답 그룹
+            const survey = {
+                interactionalJustice: {
+                    ij1: rawData.ij1 ? parseInt(rawData.ij1) : null, ij2: rawData.ij2 ? parseInt(rawData.ij2) : null,
+                    ij3: rawData.ij3 ? parseInt(rawData.ij3) : null, ij4: rawData.ij4 ? parseInt(rawData.ij4) : null,
+                    ij5: rawData.ij5 ? parseInt(rawData.ij5) : null, ij6: rawData.ij6 ? parseInt(rawData.ij6) : null,
+                    ij7: rawData.ij7 ? parseInt(rawData.ij7) : null, ij8: rawData.ij8 ? parseInt(rawData.ij8) : null,
+                    ij9: rawData.ij9 ? parseInt(rawData.ij9) : null
+                },
+                proceduralJustice: {
+                    pj1: rawData.pj1 ? parseInt(rawData.pj1) : null, pj2: rawData.pj2 ? parseInt(rawData.pj2) : null,
+                    pj3: rawData.pj3 ? parseInt(rawData.pj3) : null, pj4: rawData.pj4 ? parseInt(rawData.pj4) : null,
+                    pj5: rawData.pj5 ? parseInt(rawData.pj5) : null, pj6: rawData.pj6 ? parseInt(rawData.pj6) : null,
+                    pj7: rawData.pj7 ? parseInt(rawData.pj7) : null
+                },
+                organizationalAttractiveness: {
+                    oa1: rawData.oa1 ? parseInt(rawData.oa1) : null, oa2: rawData.oa2 ? parseInt(rawData.oa2) : null,
+                    oa3: rawData.oa3 ? parseInt(rawData.oa3) : null
                 }
-                return;
-            }
+            };
             
-            const formData = new FormData(form);
-            for (let [key, value] of formData.entries()) {
-                participantInfo[key] = value;
-            }
+            // 점수 계산 그룹
+            const scores = {
+                ij_mean: calculateMean(Object.values(survey.interactionalJustice)),
+                pj_mean: calculateMean(Object.values(survey.proceduralJustice)),
+                oa_mean: calculateMean(Object.values(survey.organizationalAttractiveness))
+            };
+
+            // 최종 문서 구조
+            const structuredDocument = {
+                participant, survey, scores, files: fileLinks,
+                metadata: { documentId: docId, createdAt: admin.firestore.FieldValue.serverTimestamp(), condition: rawData.condition || 'general_ai' }
+            };
             
-            participantInfo.condition = 'general_ai';
-            
-            showScreen('introScreen');
+            await db.collection('interviewResults').doc(docId).set(structuredDocument);
+            console.log(`[Firestore] 구조화된 데이터 저장 완료: ${docId}`);
+            console.log("--- Firestore 데이터 저장 완료 ---\n");
+
+        } catch (error) {
+            console.error("\n[ERROR] Firestore 처리 중 오류:", error);
+            isSuccess = false;
         }
+    }
 
-        function startFirstQuestion() { showScreen('questionScreen'); }
-        
-        function skipPrep() {
-            clearInterval(prepTimerInterval);
-            startRecording();
-        }
+    // --- 최종 응답 ---
+    if (isSuccess) {
+        res.status(200).json({ success: true, message: '성공적으로 제출되었습니다.', documentId: docId });
+    } else {
+        res.status(500).json({ success: false, message: '서버 처리 중 오류가 발생했습니다.' });
+    }
 
-        function startPrepTimer() {
-            let seconds = 60;
-            const timerDisplay = document.getElementById('prepTimerDisplay');
-            const recordBtn = document.getElementById('recordBtn');
-            const skipBtn = document.getElementById('skipBtn');
-            
-            prepTimerInterval = setInterval(() => {
-                seconds--;
-                const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
-                const secs = (seconds % 60).toString().padStart(2, '0');
-                timerDisplay.textContent = `${minutes}:${secs}`;
-                
-                if (seconds <= 10) {
-                    timerDisplay.classList.add('warning');
-                }
+    console.log("[System] 임시 파일 정리 중...");
+    files.forEach(file => fs.unlinkSync(file.path));
+    console.log("[System] 작업 완료\n");
+});
 
-                if (seconds <= 0) {
-                    clearInterval(prepTimerInterval);
-                    timerDisplay.classList.remove('warning');
-                    recordBtn.disabled = false;
-                    skipBtn.style.display = 'none';
-                    document.getElementById('prepTimer').innerHTML = '<h3 style="color: #28a745;">준비 시간이 종료되었습니다.</h3>';
-                    startRecording(); // 자동으로 녹음 시작
-                }
-            }, 1000);
-        }
-
-        async function startRecording() {
-            clearInterval(prepTimerInterval);
-            const recordBtn = document.getElementById('recordBtn');
-            if (recordBtn) recordBtn.disabled = true;
-
-            try {
-                audioStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
-                });
-                
-                showScreen('recordingScreen');
-                setupAudioVisualizer();
-
-                let audioChunks = [];
-                
-                mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
-
-                mediaRecorder.ondataavailable = event => {
-                    if (event.data.size > 0) audioChunks.push(event.data);
-                };
-
-                mediaRecorder.onstop = () => {
-                    cancelAnimationFrame(drawVisual); // 시각화 중지
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    allAudioBlobs.push(audioBlob);
-                    if (audioStream) {
-                        audioStream.getTracks().forEach(track => track.stop());
-                        audioStream = null;
-                    }
-                };
-
-                mediaRecorder.start();
-                startRecordingTimer();
-            } catch (err) {
-                console.error('마이크 접근 오류:', err);
-                showModal('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요.');
-                showScreen('questionScreen');
-            }
-        }
-
-        function setupAudioVisualizer() {
-            const audioLevel = document.getElementById('audioLevel');
-            const audioLevelFill = document.getElementById('audioLevelFill');
-            if(!audioLevel || !audioLevelFill) return;
-
-            audioLevel.classList.add('active');
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            analyser = audioContext.createAnalyser();
-            const source = audioContext.createMediaStreamSource(audioStream);
-            source.connect(analyser);
-
-            analyser.fftSize = 256;
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            
-            function draw() {
-                drawVisual = requestAnimationFrame(draw);
-                analyser.getByteFrequencyData(dataArray);
-                let sum = 0;
-                for(let i = 0; i < bufferLength; i++) {
-                    sum += dataArray[i];
-                }
-                let avg = sum / bufferLength;
-                let volume = Math.min(100, (avg / 128) * 100 * 2);
-                audioLevelFill.style.width = volume + '%';
-            }
-            draw();
-        }
-
-
-        function startRecordingTimer() {
-            let seconds = 0;
-            const timerDisplay = document.getElementById('recordingTimer');
-            const stopRecBtn = document.getElementById('stopRecBtn');
-            const minRecTimerDisp = document.getElementById('minRecTimer');
-            
-            let minRecSeconds = MIN_RECORDING_SECONDS;
-            minRecTimerDisp.textContent = `최소 녹음 시간까지 ${minRecSeconds}초 남았습니다.`;
-            
-            minRecTimerInterval = setInterval(() => {
-                 minRecSeconds--;
-                 if(minRecSeconds > 0){
-                    minRecTimerDisp.textContent = `최소 녹음 시간까지 ${minRecSeconds}초 남았습니다.`;
-                 } else {
-                     clearInterval(minRecTimerInterval);
-                     minRecTimerDisp.textContent = '이제 녹음을 완료할 수 있습니다.';
-                     stopRecBtn.disabled = false;
-                 }
-            }, 1000);
-
-            recordingTimerInterval = setInterval(() => {
-                seconds++;
-                const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-                const secs = (seconds % 60).toString().padStart(2, '0');
-                timerDisplay.textContent = `${mins}:${secs} / 01:30`;
-                
-                if (seconds >= 80) { // 종료 10초 전
-                    timerDisplay.classList.add('warning');
-                }
-
-                if (seconds >= 90) {
-                    stopRecording();
-                }
-            }, 1000);
-        }
-
-        function stopRecording() {
-            clearInterval(recordingTimerInterval);
-            clearInterval(minRecTimerInterval);
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
-            }
-
-            currentQuestionIndex++;
-            if (currentQuestionIndex < questions.length) {
-                showScreen('questionScreen');
-            } else {
-                completeInterview();
-            }
-        }
-        
-        function completeInterview() {
-            showScreen('surveyScreen');
-        }
-
-        async function submitSurvey() {
-            const form = document.getElementById('surveyForm');
-            if (!form.checkValidity()) {
-                showModal("모든 설문 문항에 답변해주세요.");
-                return;
-            }
-            
-            showScreen('finalCompleteScreen');
-            
-            // 데이터를 FormData 객체에 담습니다
-            const finalData = new FormData();
-            
-            // 1. 인적 정보 추가
-            for(const key in participantInfo){
-                finalData.append(key, participantInfo[key]);
-            }
-            
-            // 2. 설문 정보 추가
-            const surveyFormData = new FormData(form);
-            for(const [key, value] of surveyFormData.entries()){
-                finalData.append(key, value);
-            }
-            
-            // 3. 오디오 파일 추가
-            allAudioBlobs.forEach((blob, index) => {
-                const participantName = participantInfo.name || 'participant';
-                finalData.append(`audio_q_${index+1}`, blob, `${participantName}_q${index+1}_audio.webm`);
-            });
-            
-            // 4. PDF 파일 생성 및 추가
-            try {
-                const { jsPDF } = window.jspdf;
-                const participantName = participantInfo.name || 'participant';
-
-                // PDF 1: 동의서 및 인적 정보
-                const consentDoc = new jsPDF({ format: 'a4' });
-                consentDoc.addFont('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/Pretendard-Regular.ttf', 'Pretendard', 'normal');
-                consentDoc.setFont('Pretendard', 'normal');
-                consentDoc.setFontSize(16);
-                consentDoc.text("연구 참여 및 개인정보 수집·이용 동의서", 105, 20, { align: 'center' });
-                
-                let y = 40;
-                consentDoc.setFontSize(11);
-                consentDoc.text(`- 참가자 이름: ${participantName}`, 20, y); y+=10;
-                consentDoc.text(`- 연구 참여 동의: 예`, 20, y); y+=10;
-                consentDoc.text(`- 개인정보 수집 동의: 예`, 20, y); y+=15;
-
-                consentDoc.setFontSize(14);
-                consentDoc.text("참가자 인적 정보", 20, y); y+=10;
-                consentDoc.setFontSize(11);
-
-                for(const key in participantInfo) {
-                     if (key !== 'condition') {
-                       let text = `${key}: ${participantInfo[key]}`;
-                       if (y > 280) { consentDoc.addPage(); y = 20; }
-                       consentDoc.text(text, 20, y);
-                       y += 8;
-                    }
-                }
-                const consentPdfBlob = consentDoc.output('blob');
-                finalData.append('consent_info_pdf', consentPdfBlob, `${participantName}_consent_info.pdf`);
-
-                // PDF 2: 설문조사
-                const surveyDoc = new jsPDF({ format: 'a4' });
-                surveyDoc.addFont('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/Pretendard-Regular.ttf', 'Pretendard', 'normal');
-                surveyDoc.setFont('Pretendard', 'normal');
-                surveyDoc.setFontSize(16);
-                surveyDoc.text("사후 설문조사 결과", 105, 20, { align: 'center' });
-                surveyDoc.setFontSize(11);
-                surveyDoc.text(`- 참가자 이름: ${participantName}`, 20, 30);
-                y = 45;
-                for (let [key, value] of surveyFormData.entries()) {
-                    let text = `${key}: ${value}`;
-                    if (y > 280) { surveyDoc.addPage(); y = 20; }
-                    surveyDoc.text(text, 20, y);
-                    y += 8;
-                }
-                const surveyPdfBlob = surveyDoc.output('blob');
-                finalData.append('survey_results_pdf', surveyPdfBlob, `${participantName}_survey_results.pdf`);
-
-                // 5. 서버로 전송
-                const response = await fetch('https://ai-interview-server-cwvf.onrender.com/upload-and-email', {
-                    method: 'POST',
-                    body: finalData
-                });
-
-                const responseData = await response.json();
-                if (!response.ok) {
-                    throw new Error(responseData.message || `서버 오류: ${response.statusText}`);
-                }
-
-                console.log('서버 응답:', responseData);
-
-            } catch (error) {
-                console.error('전송 실패:', error);
-                showModal(`데이터 전송에 실패했습니다. 관리자에게 문의해주세요: ${error.message}`);
-                // 실패 시 다시 설문 화면으로 돌려보낼 수 있습니다.
-                // showScreen('surveyScreen'); 
-            } finally {
-                // 스피너를 숨기고 최종 완료 메시지를 보여줍니다.
-                document.getElementById('finalSpinner').style.display = 'none';
-                document.getElementById('finalContent').style.display = 'block';
-            }
-        }
-        
-        // --- Utility Functions ---
-        function showModal(message) {
-            document.getElementById('modalMessage').textContent = message;
-            document.getElementById('modal').classList.add('active');
-        }
-        function closeModal() {
-            document.getElementById('modal').classList.remove('active');
-        }
-
-    </script></body></html>
-
-</body>
-</html>
+app.listen(port, () => {
+    console.log(`[System] 서버가 http://localhost:${port} 에서 실행 중입니다.`);
+    console.log(`[System] 버전: V19-STRUCTURED`);
+    if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
+});
 
