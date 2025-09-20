@@ -70,7 +70,6 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
     for (const key in req.body) {
         const value = req.body[key];
         if (typeof value === 'string') {
-            const restoredValue = Buffer.from(value, 'latin1').toString('utf8');
             console.log(`[Encoding] ${key}: "${value}" → "${restoredValue}"`);
             rawData[key] = restoredValue;
         } else {
@@ -188,4 +187,5 @@ app.listen(port, () => {
     console.log(`[System] 버전: V19-STRUCTURED`);
     if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 });
+
 
