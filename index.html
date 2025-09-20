@@ -767,4 +767,98 @@
             // 3. 오디오 파일 추가
             allAudioBlobs.forEach((blob, index) => {
                 const participantName = participantInfo.name || 'participant';
+                finalData.append(`audio_q_${index+1}`, blob, `${participantName}_q${index+1}_audio.webm`);
+            });
+            
+            // 4. PDF 파일 생성 및 추가
+            try {
+                const { jsPDF } = window.jspdf;
+                const participantName = participantInfo.name || 'participant';
+
+                // PDF 1: 동의서 및 인적 정보
+                const consentDoc = new jsPDF({ format: 'a4' });
+                // [FIX] PDF 한글 깨짐 오류 방지를 위해 폰트 설정 제거
+                consentDoc.setFontSize(16);
+                consentDoc.text("Research Participation and Personal Information Collection Agreement", 105, 20, { align: 'center' });
+                
+                let y = 40;
+                consentDoc.setFontSize(11);
+                consentDoc.text(`- Participant Name: ${participantName}`, 20, y); y+=10;
+                consentDoc.text(`- Research Consent: Yes`, 20, y); y+=10;
+                consentDoc.text(`- Personal Info Consent: Yes`, 20, y); y+=15;
+
+                consentDoc.setFontSize(14);
+                consentDoc.text("Participant Information", 20, y); y+=10;
+                consentDoc.setFontSize(11);
+
+                for(const key in participantInfo) {
+                     if (key !== 'condition') {
+                       let text = `${key}: ${participantInfo[key]}`;
+                       if (y > 280) { consentDoc.addPage(); y = 20; }
+                       consentDoc.text(text, 20, y);
+                       y += 8;
+                    }
+                }
+                const consentPdfBlob = consentDoc.output('blob');
+                finalData.append('consent_info_pdf', consentPdfBlob, `${participantName}_consent_info.pdf`);
+
+                // PDF 2: 설문조사
+                const surveyDoc = new jsPDF({ format: 'a4' });
+                // [FIX] PDF 한글 깨짐 오류 방지를 위해 폰트 설정 제거
+                surveyDoc.setFontSize(16);
+                surveyDoc.text("Post-Interview Survey Results", 105, 20, { align: 'center' });
+                surveyDoc.setFontSize(11);
+                surveyDoc.text(`- Participant Name: ${participantName}`, 20, 30);
+                y = 45;
+                for (let [key, value] of surveyFormData.entries()) {
+                    let text = `${key}: ${value}`;
+                    if (y > 280) { surveyDoc.addPage(); y = 20; }
+                    surveyDoc.text(text, 20, y);
+                    y += 8;
+                }
+                const surveyPdfBlob = surveyDoc.output('blob');
+                finalData.append('survey_results_pdf', surveyPdfBlob, `${participantName}_survey_results.pdf`);
+
+                // 5. 서버로 전송
+                const response = await fetch('https://ai-interview-server-cwvf.onrender.com/upload-and-email', {
+                    method: 'POST',
+                    body: finalData
+                });
+
+                const responseData = await response.json();
+                if (!response.ok) {
+                    throw new Error(responseData.message || `서버 오류: ${response.statusText}`);
+                }
+
+                console.log('서버 응답:', responseData);
+
+            } catch (error) {
+                console.error('전송 실패:', error);
+                showModal(`데이터 전송에 실패했습니다. 관리자에게 문의해주세요: ${error.message}`);
+                // 실패 시 다시 설문 화면으로 돌려보낼 수 있습니다.
+                // showScreen('surveyScreen'); 
+            } finally {
+                // 스피너를 숨기고 최종 완료 메시지를 보여줍니다.
+                const spinner = document.getElementById('finalSpinner');
+                const content = document.getElementById('finalContent');
+                if(spinner) spinner.style.display = 'none';
+                if(content) content.style.display = 'block';
+            }
+        }
+        
+        // --- Utility Functions ---
+        function showModal(message) {
+            const modal = document.getElementById('modal');
+            const modalMessage = document.getElementById('modalMessage');
+            if(modalMessage) modalMessage.textContent = message;
+            if(modal) modal.classList.add('active');
+        }
+        function closeModal() {
+            const modal = document.getElementById('modal');
+            if(modal) modal.classList.remove('active');
+        }
+
+    </script>
+</body>
+</html>
 
