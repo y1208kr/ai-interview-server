@@ -166,26 +166,14 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
                 expires: '03-09-2491'
             });
             
-            // 파일 타입별로 구분하여 저장
+            // 파일 타입별로 구분하여 저장 (단순화)
             if (file.fieldname.startsWith('audio_q_')) {
                 const qNum = file.fieldname.split('_')[2];
-                fileLinks.audioFiles[`question_${qNum}`] = {
-                    url: url,
-                    filename: originalFilename,
-                    uploadedAt: timestamp
-                };
+                fileLinks.audioFiles[`question_${qNum}`] = url;  // URL만 저장
             } else if (file.fieldname.includes('consent')) {
-                fileLinks.pdfFiles.consent = {
-                    url: url,
-                    filename: originalFilename,
-                    uploadedAt: timestamp
-                };
+                fileLinks.pdfFiles.consent = url;  // URL만 저장
             } else if (file.fieldname.includes('survey')) {
-                fileLinks.pdfFiles.survey = {
-                    url: url,
-                    filename: originalFilename,
-                    uploadedAt: timestamp
-                };
+                fileLinks.pdfFiles.survey = url;  // URL만 저장
             }
         }
         console.log("--- Firebase Storage 파일 업로드 완료 ---\n");
@@ -199,33 +187,61 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
         try {
             console.log("--- Firestore 데이터 저장 시작 ---");
             
-            // 최종 구조화된 문서
+            // 최종 구조화된 문서 (평탄화된 구조로 변경)
             const structuredDocument = {
                 // 메타 정보
-                metadata: {
-                    documentId: docId,
-                    version: 'v19_structured',
-                    createdAt: createdAt,
-                    timestamp: timestamp
-                },
+                documentId: docId,
+                version: 'v19_structured',
+                createdAt: createdAt,
+                timestamp: timestamp,
+                condition: experimentInfo.condition,
                 
-                // 참가자 정보
-                participant: participantInfo,
+                // 참가자 정보 (평탄화)
+                name: participantInfo.name,
+                gender: participantInfo.gender,
+                ageGroup: participantInfo.ageGroup,
+                jobStatus: participantInfo.jobStatus,
+                major: participantInfo.major,
+                aiExperience: participantInfo.aiExperience,
+                aiAttitude: participantInfo.aiAttitude,
+                phone: participantInfo.phone,
+                bankName: participantInfo.bankName,
+                accountNumber: participantInfo.accountNumber,
                 
-                // 실험 정보
-                experiment: experimentInfo,
+                // 설문 응답 (평탄화)
+                ij1: surveyResponses.interactionalJustice.ij1_respect,
+                ij2: surveyResponses.interactionalJustice.ij2_courtesy,
+                ij3: surveyResponses.interactionalJustice.ij3_no_improper_remarks,
+                ij4: surveyResponses.interactionalJustice.ij4_no_bias,
+                ij5: surveyResponses.interactionalJustice.ij5_honest_explanation,
+                ij6: surveyResponses.interactionalJustice.ij6_timely_explanation,
+                ij7: surveyResponses.interactionalJustice.ij7_reasonable_explanation,
+                ij8: surveyResponses.interactionalJustice.ij8_sufficient_info,
+                ij9: surveyResponses.interactionalJustice.ij9_clear_evaluation,
                 
-                // 설문 응답
-                survey: surveyResponses,
+                pj1: surveyResponses.proceduralJustice.pj1_express_views,
+                pj2: surveyResponses.proceduralJustice.pj2_consistent_application,
+                pj3: surveyResponses.proceduralJustice.pj3_no_bias_procedure,
+                pj4: surveyResponses.proceduralJustice.pj4_accurate_info,
+                pj5: surveyResponses.proceduralJustice.pj5_appeal_procedure,
+                pj6: surveyResponses.proceduralJustice.pj6_represent_values,
+                pj7: surveyResponses.proceduralJustice.pj7_ethical_standards,
+                
+                oa1: surveyResponses.organizationalAttractiveness.oa1_attractive_workplace,
+                oa2: surveyResponses.organizationalAttractiveness.oa2_positive_impression,
+                oa3: surveyResponses.organizationalAttractiveness.oa3_overall_evaluation,
                 
                 // 계산된 점수
-                scores: calculatedScores,
+                ij_mean: calculatedScores.ij_mean,
+                pj_mean: calculatedScores.pj_mean,
+                oa_mean: calculatedScores.oa_mean,
                 
-                // 파일 링크
-                files: fileLinks,
-                
-                // 원본 데이터 (백업용)
-                rawData: rawData
+                // 파일 링크 (평탄화)
+                audio_q1_url: fileLinks.audioFiles.question_1,
+                audio_q2_url: fileLinks.audioFiles.question_2,
+                audio_q3_url: fileLinks.audioFiles.question_3,
+                pdf_consent_url: fileLinks.pdfFiles.consent,
+                pdf_survey_url: fileLinks.pdfFiles.survey
             };
             
             // 메인 컬렉션에 저장
