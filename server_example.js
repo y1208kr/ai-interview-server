@@ -59,24 +59,13 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
     const timestamp = new Date().toISOString();
     const createdAt = admin.firestore.FieldValue.serverTimestamp();
 
-    // --- 1단계: 인코딩 복원 ---
-    console.log('[Encoding] 텍스트 필드 인코딩 복원 시작...');
-    const rawData = {};
+    // --- 1단계: 데이터 처리 (인코딩 변환 없이 그대로 사용) ---
+    console.log('[Data] 요청 데이터 처리 시작...');
+    const rawData = req.body;  // 그대로 사용!
     
-    for (const key in req.body) {
-        const value = req.body[key];
-        if (typeof value === 'string') {
-            try {
-                console.log(`[Encoding] ${key}: "${value}" → "${restoredValue}"`);
-                rawData[key] = restoredValue;
-            } catch (e) {
-                console.log(`[Encoding] 복원 실패 - ${key}, 원본 값 사용`);
-                rawData[key] = value;
-            }
-        } else {
-            rawData[key] = value;
-        }
-    }
+    // 한글 데이터 확인용 로그
+    if (rawData.name) console.log(`[Data] name: "${rawData.name}"`);
+    if (rawData.bankName) console.log(`[Data] bankName: "${rawData.bankName}"`);
 
     // --- 2단계: 데이터 구조화 ---
     // 참가자 기본 정보
@@ -153,13 +142,8 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
     try {
         console.log("\n--- Firebase Storage 파일 업로드 시작 ---");
         for (const file of files) {
-            // 파일명 인코딩 복원
-            let originalFilename;
-            try {
-                originalFilename = Buffer.from(file.originalname, 'latin1').toString('utf8');
-            } catch (e) {
-                originalFilename = file.originalname;
-            }
+            // 파일명도 그대로 사용 (인코딩 변환 없음)
+            const originalFilename = file.originalname;
             
             const destination = `results/${docId}/${originalFilename}`;
             console.log(`[Storage] '${originalFilename}' 업로드 중...`);
@@ -339,4 +323,3 @@ app.listen(port, () => {
     console.log(`[System] 데이터 구조: 계층적/구조화된 형태`);
     if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 });
-
