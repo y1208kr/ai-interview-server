@@ -67,7 +67,6 @@ app.post('/upload-and-email', upload.any(), async (req, res) => {
         const value = req.body[key];
         if (typeof value === 'string') {
             try {
-                const restoredValue = Buffer.from(value, 'latin1').toString('utf8');
                 console.log(`[Encoding] ${key}: "${value}" → "${restoredValue}"`);
                 rawData[key] = restoredValue;
             } catch (e) {
@@ -340,3 +339,4 @@ app.listen(port, () => {
     console.log(`[System] 데이터 구조: 계층적/구조화된 형태`);
     if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 });
+
